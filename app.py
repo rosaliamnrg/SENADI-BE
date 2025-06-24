@@ -1,0 +1,2132 @@
+# backend/app.py
+from flask import Flask, request, jsonify
+from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
+from flask_cors import CORS
+import mysql.connector
+import os
+import uuid
+import traceback
+import google.generativeai as genai
+import json
+import bcrypt
+import re
+from datetime import datetime, timedelta
+from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+import pandas as pd
+import random
+import pypdf
+
+# LangChain imports
+from langchain.chains import RetrievalQA
+from langchain_community.vectorstores import FAISS
+from langchain_community.document_loaders import PyPDFLoader, TextLoader, CSVLoader
+from langchain_community.document_loaders.excel import UnstructuredExcelLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain.prompts import PromptTemplate
+from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_community.embeddings import SentenceTransformerEmbeddings
+from langchain_core.documents import Document
+
+# Load environment variables
+load_dotenv()
+
+# Set up Google API key for Gemini
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+GEMINI_AVAILABLE = False
+MODEL_NAME = 'gemini-1.5-flash'  # Default model name
+
+if GOOGLE_API_KEY:
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        # Try with different model names
+        try:
+            model = genai.GenerativeModel(MODEL_NAME)
+            test_response = model.generate_content("Test")
+            if test_response:
+                print(f"Gemini model {MODEL_NAME} initialized successfully")
+                GEMINI_AVAILABLE = True
+        except Exception as model_error:
+            print(f"Error with {MODEL_NAME}: {str(model_error)}")
+            try:
+                # Try alternative model name
+                MODEL_NAME = 'gemini-1.5-flash'
+                model = genai.GenerativeModel(MODEL_NAME)
+                test_response = model.generate_content("Test")
+                if test_response:
+                    print(f"Gemini model {MODEL_NAME} initialized successfully")
+                    GEMINI_AVAILABLE = True
+            except Exception as alt_error:
+                print(f"Error with {MODEL_NAME}: {str(alt_error)}")
+                print("Using simple response mode for all queries.")
+    except Exception as e:
+        print(f"WARNING: Failed to initialize Gemini: {str(e)}")
+        print("Using simple response mode for all queries.")
+else:
+    print("Warning: GOOGLE_API_KEY not set. Gemini integration will not work.")
+
+# Configure uploads directory
+UPLOADS_DIR = os.getenv('UPLOADS_DIR', 'uploads')
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+# Configure Vector store directory
+VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store')
+os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
+
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app, 
+    resources={r"/*": {
+        "origins": "*", 
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"]
+    }},
+    supports_credentials=True
+)
+
+# Configure JWT
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-in-production')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies', 'query_string']
+app.config['JWT_HEADER_NAME'] = 'Authorization'
+app.config['JWT_HEADER_TYPE'] = 'Bearer'
+jwt = JWTManager(app)
+
+# Global vector store variable
+vector_store = None
+qa_chain = None
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150)
+
+# Configure database
+def get_db_connection():
+    db_name = os.getenv('DB_NAME', 'chatbot.susenas')
+    print(f"Connecting to database: {db_name}")
+    return mysql.connector.connect(
+        host=os.getenv('DB_HOST', 'localhost'),
+        user=os.getenv('DB_USER', 'root'), 
+        password=os.getenv('DB_PASSWORD', ''),
+        database=db_name
+    )
+
+# File processing utilities for knowledge base
+def extract_text_from_pdf(pdf_path, max_pages=None):
+    """Extract text from a PDF file, optionally limited to max_pages"""
+    try:
+        text = ""
+        with open(pdf_path, 'rb') as file:
+            reader = pypdf.PdfReader(file)
+            pages_to_read = len(reader.pages) if max_pages is None else min(len(reader.pages), max_pages)
+            print(f"Extracting text from PDF: {pdf_path} - {pages_to_read} pages")
+            for i in range(pages_to_read):
+                page = reader.pages[i]
+                text += page.extract_text() + "\n\n"
+        return text
+    except Exception as e:
+        print(f"Error extracting text from PDF {pdf_path}: {str(e)}")
+        return f"Error extracting PDF content: {str(e)}"
+
+def extract_data_from_excel(excel_path):
+    """Extract data from Excel file, handling multiple formats and sheets"""
+    try:
+        print(f"Processing Excel file: {excel_path}")
+        # Read all sheets
+        excel_data = pd.read_excel(excel_path, sheet_name=None)
+        
+        # Process each sheet
+        text_content = []
+        for sheet_name, df in excel_data.items():
+            sheet_text = f"Sheet: {sheet_name}\n"
+            
+            # Handle Q&A format specifically (looking for columns like question/answer, q/a, etc)
+            question_cols = [col for col in df.columns if any(q in str(col).lower() for q in ['Jenis Kuesioner', 'Blok', 'Nomor Pertanyaan', 'Permasalahan'])]
+            answer_cols = [col for col in df.columns if any(a in str(col).lower() for a in ['Solusi'])]
+            
+            if question_cols and answer_cols:
+                print(f"  Found Q&A format in sheet {sheet_name}")
+                for _, row in df.iterrows():
+                    for q_col in question_cols:
+                        for a_col in answer_cols:
+                            if pd.notna(row[q_col]) and pd.notna(row[a_col]):
+                                # Create a document for each Q&A pair
+                                qa_text = f"Q: {row[q_col]}\nA: {row[a_col]}"
+                                text_content.append(Document(
+                                    page_content=qa_text,
+                                    metadata={"source": f"{os.path.basename(excel_path)}:{sheet_name}", "type": "qa"}
+                                ))
+            else:
+                # Convert each row to a document
+                for i, row in df.iterrows():
+                    row_text = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
+                    if row_text:
+                        text_content.append(Document(
+                            page_content=row_text,
+                            metadata={"source": f"{os.path.basename(excel_path)}:{sheet_name}", "row": i, "type": "data"}
+                        ))
+        
+        return text_content
+    except Exception as e:
+        print(f"Error extracting data from Excel {excel_path}: {str(e)}")
+        return []
+
+def process_documents_from_uploads(deleted_filename = None):
+    """Process all documents in the uploads directory and convert to Document objects"""
+    uploads_dir = os.getenv('UPLOADS_DIR', 'uploads')
+    documents = []
+    basic_info = """
+    Survei Sosial Ekonomi Nasional (Susenas) adalah sistem survei yang digunakan BPS untuk mengumpulkan data sosial-ekonomi penduduk Indonesia. 
+    Susenas pertama kali dilakukan pada tahun 1963. Susenas mengumpulkan data konsumsi/pengeluaran rumah tangga, pendidikan, kesehatan, fertilitas, 
+    perumahan, dan kondisi sosial-ekonomi lainnya. Data Susenas digunakan untuk berbagai perencanaan, monitoring, dan evaluasi kebijakan pemerintah.
+    
+    Survei Sosial Ekonomi Nasional (Susenas) adalah sebuah kegiatan survei yang dilaksanakan oleh Badan Pusat Statistik (BPS) Indonesia. 
+    Survei ini bertujuan untuk mengumpulkan data sosial ekonomi penduduk Indonesia, yang mencakup bidang demografi, kesehatan, pendidikan, 
+    perumahan, serta konsumsi dan pengeluaran rumah tangga. Susenas merupakan sumber data utama untuk menghitung berbagai indikator kesejahteraan 
+    rakyat di Indonesia.
+    
+    Bot Susenas adalah asisten virtual yang dirancang untuk membantu menjawab pertanyaan seputar Survei Sosial Ekonomi Nasional (Susenas). 
+    Bot ini dapat memberikan informasi tentang konsep, definisi, metodologi, dan hasil-hasil Susenas, serta membantu pengguna dalam mengakses 
+    dan memahami data Susenas untuk berbagai keperluan analisis dan penelitian.
+    """
+    
+    # Add basic info as a document
+    documents.append(Document(
+        page_content=basic_info,
+        metadata={"source": "basic_info", "type": "overview"}
+    ))
+    
+    # Process each file in the uploads directory
+    try:
+        print(f"Scanning directory: {uploads_dir}")
+        files = os.listdir(uploads_dir)
+        
+        files = [f for f in files if f != deleted_filename]
+
+        # Process Excel files first for Q&A data
+        excel_files = [f for f in files if f.lower().endswith(('.xlsx', '.xls'))]
+        excel_files.sort(reverse=True)
+        
+        for filename in excel_files:
+            filepath = os.path.join(uploads_dir, filename)
+            if not os.path.isfile(filepath):
+                continue
+                
+            print(f"Processing Excel: {filename}")
+            try:
+                excel_docs = extract_data_from_excel(filepath)
+                documents.extend(excel_docs)
+                print(f"Added {len(excel_docs)} Q&A pairs from {filename}")
+            except Exception as e:
+                print(f"Error processing Excel {filename}: {str(e)}")
+        
+        # Then process PDF files
+        pdf_files = [f for f in files if f.lower().endswith('.pdf')]
+        pdf_files.sort(key=lambda f: os.path.getsize(os.path.join(uploads_dir, f)))
+        
+        for filename in pdf_files:
+            filepath = os.path.join(uploads_dir, filename)
+            if not os.path.isfile(filepath):
+                continue
+                
+            file_size = os.path.getsize(filepath) / (1024 * 1024)  # Size in MB
+            max_pages = None  # Hilangkan batasan jumlah halaman, proses semua halaman
+            
+            print(f"Processing PDF: {filename} (max {max_pages} pages)")
+            
+            try:
+                text = extract_text_from_pdf(filepath, max_pages)
+                chunks = text_splitter.split_text(text)
+                print(f"Split PDF into {len(chunks)} chunks")
+                
+                for i, chunk in enumerate(chunks):
+                    documents.append(Document(
+                        page_content=chunk,
+                        metadata={"source": filename, "chunk": i, "type": "pdf"}
+                    ))
+            except Exception as e:
+                print(f"Error processing PDF {filename}: {str(e)}")
+        
+        # Process text files last
+        text_files = [f for f in files if f.lower().endswith(('.txt', '.md', '.csv'))]
+        for filename in text_files:
+            filepath = os.path.join(uploads_dir, filename)
+            if not os.path.isfile(filepath):
+                continue
+                
+            print(f"Processing text file: {filename}")
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    text = f.read()
+                    chunks = text_splitter.split_text(text)
+                    for i, chunk in enumerate(chunks):
+                        documents.append(Document(
+                            page_content=chunk,
+                            metadata={"source": filename, "chunk": i, "type": "text"}
+                        ))
+            except Exception as read_error:
+                print(f"Failed to read text file {filename}: {str(read_error)}")
+        
+        print(f"Total documents processed: {len(documents)}")
+        return documents
+    except Exception as e:
+        print(f"Error processing documents: {str(e)}")
+        print(traceback.format_exc())
+        return [Document(page_content=basic_info, metadata={"source": "basic_info", "type": "overview"})]
+
+def initialize_vector_store():
+    """Initialize or load the vector store with documents from uploads"""
+    global vector_store, qa_chain
+    
+    try:
+        # Try to load existing vector store
+        if os.path.exists(os.path.join(VECTOR_STORE_DIR, "index.faiss")):
+            print("Loading existing FAISS index...")
+            try:
+                # Use GoogleGenerativeAIEmbeddings as default - more reliable
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                vector_store = FAISS.load_local(VECTOR_STORE_DIR, embeddings, allow_dangerous_deserialization=True)
+                print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
+            except Exception as load_error:
+                print(f"Error loading FAISS index: {str(load_error)}")
+                # If loading fails, we'll create a new index
+                vector_store = None
+
+        # If vector store couldn't be loaded or doesn't exist, create a new one
+        if vector_store is None:
+            print("Creating new vector store...")
+            documents = process_documents_from_uploads()
+            
+            if not documents:
+                print("No documents found to process")
+                return False
+                
+            print(f"Creating embeddings for {len(documents)} documents")
+            
+            # Use GoogleGenerativeAIEmbeddings as default
+            try:
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                vector_store = FAISS.from_documents(documents, embeddings)
+                print("Created FAISS index with GoogleGenerativeAIEmbeddings")
+                
+                # Save the index
+                vector_store.save_local(VECTOR_STORE_DIR)
+                print(f"Saved FAISS index to {VECTOR_STORE_DIR}")
+            except Exception as embed_error:
+                print(f"Error creating embeddings: {str(embed_error)}")
+                traceback.print_exc()
+                return False
+        
+        # Create the QA chain
+        if GEMINI_AVAILABLE and vector_store:
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            
+            # Template for Gemini
+            template = """
+            Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+
+            Anda berikan jawaban yang relevan dan ringkas berdasarkan dokumen dan pertanyaan dari pengguna. Anda juga tidak memberikan jawaban di luar dokumen.
+            
+            Jika informasi tidak tersedia dalam konteks, katakan "Maaf, saya tidak memiliki informasi spesifik untuk menjawab pertanyaan tersebut." JANGAN pernah mengarang jawaban. Jangan gunakan tanda asterisk (*) atau double asterisk (**) dalam jawabannya.
+            
+            Respon dengan Bahasa Indonesia yang baik dan benar. Jawaban harus informatif, lengkap, dan presisi.
+            
+            Konteks:
+            {context}
+            
+            Pertanyaan: {question}
+            
+            Jawaban yang informatif, lengkap, dan presisi:
+            """
+            
+            PROMPT = PromptTemplate(
+                template=template,
+                input_variables=["context", "question"],
+            )
+            
+            llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
+            
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": PROMPT}
+            )
+            
+            print("Successfully created QA chain with Gemini")
+            return True
+        else:
+            print("Could not create QA chain - Gemini not available or vector store failed")
+            return False
+    except Exception as e:
+        print(f"Error initializing vector store: {str(e)}")
+        print(traceback.format_exc())
+        return False
+
+# Initialize the vector store on startup
+print("Initializing vector store...")
+vector_store_initialized = initialize_vector_store()
+
+# Enhanced conversation handlers
+def get_greeting_response(message):
+    """Return a natural greeting response in Indonesian"""
+    greetings = {
+        'hai': [
+            'Hai! Ada yang bisa saya bantu tentang Susenas?',
+            'Halo! Senang berbicara dengan Anda. Ada yang ingin ditanyakan tentang Susenas?',
+            'Hai! Saya Bot Susenas, siap membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional.'
+        ],
+        'halo': [
+            'Halo! Apa kabar? Ada yang bisa saya bantu?',
+            'Halo! Saya Bot Susenas, siap menjawab pertanyaan Anda.',
+            'Halo! Senang bertemu dengan Anda. Tanyakan saja apa yang ingin Anda ketahui tentang Susenas.'
+        ],
+        'selamat pagi': [
+            'Selamat pagi! Semoga hari Anda menyenangkan. Ada yang bisa saya bantu terkait Susenas?',
+            'Pagi yang cerah! Saya siap membantu Anda dengan informasi Susenas hari ini.'
+        ],
+        'selamat siang': [
+            'Selamat siang! Ada yang bisa saya bantu terkait Susenas?',
+            'Siang yang baik! Saya siap membantu Anda dengan informasi Susenas hari ini.'
+        ],
+        'selamat sore': [
+            'Selamat sore! Ada yang bisa saya bantu terkait Susenas?',
+            'Sore yang menyenangkan! Saya siap membantu Anda dengan informasi Susenas hari ini.'
+        ],
+        'selamat malam': [
+            'Selamat malam! Ada yang bisa saya bantu terkait Susenas?',
+            'Malam yang tenang! Saya siap membantu Anda dengan informasi Susenas.'
+        ],
+        'apa kabar': [
+            'Saya baik-baik saja, terima kasih telah bertanya! Bagaimana dengan Anda? Ada yang ingin ditanyakan tentang Susenas?',
+            'Sebagai bot, saya selalu siap membantu! Bagaimana kabar Anda? Ada yang ingin ditanyakan tentang Susenas?'
+        ],
+        'assalamualaikum': [
+            'Waalaikumsalam Warahmatullahi Wabarakatuh. Ada yang bisa saya bantu terkait Susenas?',
+            'Waalaikumsalam. Semoga hari Anda menyenangkan. Ada pertanyaan tentang Susenas?'
+        ],
+        'terimakasih': [
+            'Sama-sama! Senang bisa membantu. Ada hal lain yang ingin ditanyakan?',
+            'Dengan senang hati! Jangan ragu untuk bertanya lagi jika ada yang ingin Anda ketahui tentang Susenas.'
+        ],
+        'terima kasih': [
+            'Sama-sama! Senang bisa membantu. Ada hal lain yang ingin ditanyakan?',
+            'Dengan senang hati! Jangan ragu untuk bertanya lagi jika ada yang ingin Anda ketahui tentang Susenas.'
+        ],
+        'salam kenal': [
+            'Salam kenal juga! Saya Bot Susenas, asisten yang akan membantu Anda dengan informasi tentang Survei Sosial Ekonomi Nasional.',
+            'Salam kenal! Saya siap membantu menjawab pertanyaan Anda tentang Susenas. Apa yang ingin Anda ketahui?'
+        ],
+        'siapa kamu': [
+            'Saya adalah Bot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas).',
+            'Saya Bot Susenas, asisten yang akan membantu Anda memahami dan mengakses informasi tentang Survei Sosial Ekonomi Nasional yang dilakukan oleh BPS.'
+        ],
+        'kamu siapa': [
+            'Saya adalah Bot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas).',
+            'Saya Bot Susenas, asisten yang akan membantu Anda memahami dan mengakses informasi tentang Survei Sosial Ekonomi Nasional yang dilakukan oleh BPS.'
+        ]
+    }
+    
+    # Check if message contains any greeting key
+    message_lower = message.lower()
+    for key, responses in greetings.items():
+        if key in message_lower:
+            return random.choice(responses)
+    
+    return None
+
+def is_about_bot(message):
+    """Check if the message is asking about the bot itself"""
+    bot_indicators = ['kamu', 'bot', 'asisten', 'dirimu', 'namamu', 'siapa kamu', 'bot susenas', 'susenas bot']
+    question_indicators = ['siapa', 'apa', 'kenapa', 'mengapa', 'bagaimana', 'kapan', 'untuk apa', 'fungsi', 'kegunaan']
+    
+    message_lower = message.lower()
+    has_bot_word = any(word in message_lower for word in bot_indicators)
+    has_question = any(word in message_lower for word in question_indicators)
+    
+    return has_bot_word and has_question
+
+def get_bot_info_response():
+    """Return information about the bot itself"""
+    responses = [
+        "Saya adalah Bot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas). Saya dapat menjawab pertanyaan tentang metodologi survei, konsep dan definisi, hasil-hasil survei, dan cara mengakses data Susenas.",
+        
+        "Saya Bot Susenas, dikembangkan untuk membantu pengguna memahami dan mengakses informasi tentang Susenas (Survei Sosial Ekonomi Nasional). Saya dilatih menggunakan dokumen-dokumen resmi dari BPS untuk memberikan informasi yang akurat tentang survei ini.",
+        
+        "Bot Susenas adalah asisten digital yang membantu menjawab pertanyaan tentang Survei Sosial Ekonomi Nasional. Saya dirancang untuk memberikan informasi teknis dan praktis tentang Susenas, membantu pengguna memahami metodologi, definisi, dan hasil survei."
+    ]
+    return random.choice(responses)
+
+def is_about_susenas(message):
+    """Check if the message is asking about Susenas in general"""
+    susenas_indicators = ['susenas', 'survei', 'survey', 'sosial ekonomi', 'bps', 'statistik']
+    general_question = ['apa', 'itu', 'jelaskan', 'ceritakan', 'definisi', 'maksud', 'pengertian', 'adalah']
+    
+    message_lower = message.lower()
+    has_susenas_word = any(word in message_lower for word in susenas_indicators)
+    has_general_q = any(word in message_lower for word in general_question)
+    
+    return has_susenas_word and has_general_q
+
+def get_susenas_info_response():
+    """Return general information about Susenas"""
+    responses = [
+        "Survei Sosial Ekonomi Nasional (Susenas) adalah survei skala besar yang dilakukan oleh Badan Pusat Statistik (BPS) Indonesia. Survei ini mengumpulkan data tentang kondisi sosial-ekonomi rumah tangga Indonesia, termasuk pendidikan, kesehatan, perumahan, dan pola konsumsi. Susenas dilaksanakan secara reguler sejak tahun 1963 dan menjadi sumber data utama untuk kebijakan pembangunan sosial di Indonesia.",
+        
+        "Susenas atau Survei Sosial Ekonomi Nasional adalah kegiatan pengumpulan data yang dilakukan BPS untuk mengukur berbagai indikator kesejahteraan rakyat. Data yang dikumpulkan meliputi struktur pengeluaran rumah tangga, kondisi kesehatan, pendidikan, perumahan, dan karakteristik sosial-ekonomi lainnya. Hasil Susenas digunakan untuk mengukur kemiskinan, ketimpangan, dan berbagai indikator pembangunan manusia di Indonesia.",
+        
+        "Survei Sosial Ekonomi Nasional (Susenas) merupakan salah satu survei yang diselenggarakan oleh BPS secara rutin. Susenas menghasilkan data tentang kondisi sosial ekonomi masyarakat, termasuk pengeluaran konsumsi, pendidikan, kesehatan, dan perumahan. Data ini sangat penting untuk perencanaan, monitoring, dan evaluasi program pembangunan pemerintah. Sejak awal, Susenas dirancang untuk mengumpulkan data pokok yang diperlukan untuk berbagai indikator pembangunan, antara lain tingkat pendidikan, kesehatan, dan kesejahteraan penduduk."
+    ]
+    return random.choice(responses)
+
+@app.route('/')
+def index():
+    try:
+        # Test database connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        # Check authentication
+        jwt_config = {
+            'secret_key': app.config['JWT_SECRET_KEY'][:5] + '...',
+            'token_location': app.config['JWT_TOKEN_LOCATION'],
+            'header_name': app.config['JWT_HEADER_NAME'],
+            'header_type': app.config['JWT_HEADER_TYPE'],
+            'expiration': str(app.config['JWT_ACCESS_TOKEN_EXPIRES'])
+        }
+
+        # Get list of routes
+        routes = [str(rule) for rule in app.url_map.iter_rules()]
+
+        return jsonify({
+            "status": "success",
+            "message": "Chatbot API is running",
+            "database": "connected",
+            "gemini": "available" if GEMINI_AVAILABLE else "unavailable",
+            "jwt_config": jwt_config,
+            "endpoints": routes,
+            "cors": "configured"
+        })
+    except Exception as e:
+        print(f"Health check error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "details": traceback.format_exc()
+        }), 500
+
+@app.route('/register', methods=['POST'])
+def register():
+    try:
+        data = request.json
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+    
+        # Validate required fields
+        if not username or not email or not password:
+            return jsonify({"error": "Username, email and password are required"}), 400
+            
+        # Validate email format
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            return jsonify({"error": "Invalid email format"}), 400
+            
+        # Validate password strength
+        if len(password) < 4:
+            return jsonify({"error": "Password must be at least 4 characters"}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check if email already exists
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Email already registered"}), 409
+        
+        # Check if username already exists
+        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Username already taken"}), 409
+            
+        # Store password as plain text to match existing database format
+        # Note: In production, passwords should be hashed with bcrypt
+        
+        # Generate user ID
+        user_id = str(uuid.uuid4())
+        
+        # Insert user into database (default role = 'user')
+        cursor.execute(
+            "INSERT INTO users (id, username, email, password, role) VALUES (%s, %s, %s, %s, %s)",
+            (user_id, username, email, password, 'user')
+        )
+        conn.commit()
+        
+        # Generate JWT token
+        token = create_access_token(identity=user_id)
+        
+        return jsonify({
+            "success": True,
+            "message": "User registered successfully",
+            "token": token,
+            "user": {
+                "id": user_id,
+                "username": username,
+                "email": email,
+                "is_admin": False
+            }
+        }), 201
+        
+    except Exception as e:
+        print(f"Registration error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except:
+            pass
+
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Get user by email
+        cursor.execute("SELECT id, username, email, password, role FROM users WHERE email = %s", (email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Invalid email or password"}), 401
+            
+        # Plain text password comparison (for existing database)
+        if password != user['password']:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Invalid email or password"}), 401
+            
+        # Generate JWT token
+        token = create_access_token(identity=user['id'])
+        
+        # Check if role is admin
+        is_admin = user['role'] == 'admin'
+        
+        return jsonify({
+            "success": True,
+            "token": token,
+            "user": {
+                "id": user['id'],
+                "username": user['username'],
+                "email": user['email'],
+                "is_admin": is_admin
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except:
+            pass
+
+@app.route('/chat/new', methods=['POST'])
+@jwt_required()
+def create_chat():
+    try:
+        user_id = get_jwt_identity()
+        print(f"Creating chat for user: {user_id}")
+        
+        # Check request content type
+        content_type = request.headers.get('Content-Type', '')
+        print(f"Request Content-Type: {content_type}")
+        
+        # Handle different content types or empty requests
+        if 'application/json' in content_type and request.data:
+            try:
+                data = request.get_json(silent=True) or {}
+                title = data.get('title', 'New Chat')
+            except Exception as json_error:
+                print(f"JSON parsing error: {str(json_error)}")
+                title = 'New Chat'
+        elif 'application/x-www-form-urlencoded' in content_type:
+            title = request.form.get('title', 'New Chat')
+        else:
+            # Default title for empty requests
+            title = 'New Chat'
+            
+        print(f"Chat title: {title}")
+        
+        # First verify the user exists
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            print(f"User not found: {user_id}")
+            return jsonify({"error": "User not found"}), 404
+        
+        print(f"User found: {user['username']}")
+        
+        # Generate chat ID
+        chat_id = str(uuid.uuid4())
+        print(f"Generated chat ID: {chat_id}")
+        
+        # Fetch table structure to determine available columns
+        cursor.execute("DESCRIBE chats")
+        columns = cursor.fetchall()
+        column_names = [col['Field'] for col in columns]
+        print(f"Available columns in chats table: {column_names}")
+        
+        # Prepare insert query based on available columns
+        insert_columns = ['id', 'user_id']
+        insert_values = [chat_id, user_id]
+        
+        if 'title' in column_names:
+            insert_columns.append('title')
+            insert_values.append(title)
+        
+        if 'created_at' in column_names and 'DEFAULT' not in [col.get('Extra', '').upper() for col in columns if col['Field'] == 'created_at']:
+            insert_columns.append('created_at')
+            insert_values.append(datetime.now())
+        
+        # Construct the query dynamically
+        placeholders = ', '.join(['%s'] * len(insert_values))
+        insert_query = f"INSERT INTO chats ({', '.join(insert_columns)}) VALUES ({placeholders})"
+        print(f"Insert query: {insert_query}")
+        print(f"Insert values: {insert_values}")
+        
+        # Execute the insert
+        cursor.execute(insert_query, insert_values)
+        conn.commit()
+        
+        print(f"Chat created successfully: {chat_id}")
+        
+        return jsonify({
+            "success": True,
+            "chat_id": chat_id,
+            "title": title
+        }), 201
+        
+    except Exception as e:
+        print(f"Create chat error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": f"Failed to create chat: {str(e)}"}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing database connection: {str(close_error)}")
+
+@app.route('/chat/<chat_id>', methods=['POST'])
+@jwt_required()
+def chat(chat_id):
+    try:
+        user_id = get_jwt_identity()
+        print(f"Processing chat message for user {user_id} in chat {chat_id}")
+        
+        # Handle different content types
+        content_type = request.headers.get('Content-Type', '')
+        print(f"Request Content-Type: {content_type}")
+        
+        # Extract message from different content types
+        content = None
+        if 'application/json' in content_type and request.data:
+            try:
+                data = request.get_json(silent=True) or {}
+                content = data.get('message')
+            except Exception as json_error:
+                print(f"JSON parsing error: {str(json_error)}")
+        elif 'application/x-www-form-urlencoded' in content_type:
+            content = request.form.get('message')
+        else:
+            # Try to get from any source as fallback
+            content = (request.get_json(silent=True) or {}).get('message') or request.form.get('message')
+        
+        if not content:
+            return jsonify({"error": "Message is required"}), 400
+        
+        print(f"Received message: {content[:50]}...")
+        
+        # Verify chat exists and belongs to user
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id FROM chats WHERE id = %s AND user_id = %s", (chat_id, user_id))
+    
+        chat = cursor.fetchone()
+        if not chat:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Chat not found or access denied"}), 404
+        
+        # Save user message - Using AUTO_INCREMENT for id
+        try:
+            cursor.execute(
+                "INSERT INTO messages (chat_id, message, sender) VALUES (%s, %s, %s)",
+                (chat_id, content, 'user')
+            )
+            conn.commit()
+        except Exception as e:
+            print(f"Error saving user message: {str(e)}")
+            # Continue even if saving fails - we'll still try to generate a response
+        
+        # Get last 5 messages for context
+        cursor.execute(
+            "SELECT message, sender FROM messages WHERE chat_id = %s ORDER BY created_at DESC LIMIT 5",
+            (chat_id,)
+        )
+        
+        previous_messages = cursor.fetchall()
+        previous_messages.reverse()  # Reverse to get chronological order
+        
+        # Build conversation context
+        conversation_history = ""
+        for msg in previous_messages:
+            role = "Human" if msg['sender'] == 'user' else "Assistant"
+            conversation_history += f"{role}: {msg['message']}\n"
+        
+        bot_response = ""
+        is_from_correction = False
+        
+        # Cek apakah ada jawaban terkoreksi yang sesuai dengan pertanyaan ini
+        try:
+            # Cari pertanyaan serupa yang pernah dikoreksi (simple exact match)
+            cursor.execute("""
+                SELECT m_corr.message AS corrected_answer
+                FROM messages m_user
+                JOIN messages m_bot ON m_bot.chat_id = m_user.chat_id 
+                JOIN messages m_corr ON m_corr.corrected_message_id = m_bot.id
+                WHERE m_user.message = %s 
+                    AND m_user.sender = 'user'
+                    AND m_bot.sender = 'bot'
+                    AND m_bot.is_corrected = FALSE
+                    AND m_corr.is_correction = FALSE
+                ORDER BY m_corr.created_at DESC
+                LIMIT 1
+            """, (content,))
+            
+            corrected_result = cursor.fetchone()
+            
+            if corrected_result:
+                bot_response = corrected_result['corrected_answer']
+                is_from_correction = True
+                print(f"Using corrected answer from previous admin verification for '{content}'")
+            
+        except Exception as corr_err:
+            print(f"Error checking for corrected answers: {str(corr_err)}")
+            # Lanjutkan proses normal jika terjadi error
+        
+        # Jika tidak ada jawaban terkoreksi, gunakan flow normal
+        if not bot_response:
+            # Check for greeting or simple queries first
+            greeting_response = get_greeting_response(content)
+            if greeting_response:
+                bot_response = greeting_response
+            elif is_about_bot(content):
+                bot_response = get_bot_info_response()
+            elif is_about_susenas(content):
+                bot_response = get_susenas_info_response()
+            else:
+                # Use LangChain QA chain for more complex queries
+                try:
+                    if qa_chain and vector_store_initialized:
+                        print("Using LangChain QA chain for response generation")
+                        try:
+                            # Include conversation history in the query for context
+                            result = qa_chain({"query": content})
+                            
+                            # Extract the answer and sources
+                            if result and "result" in result:
+                                bot_response = result["result"]
+                                
+                                # Log source documents used
+                                if "source_documents" in result:
+                                    sources = [doc.metadata.get('source', 'unknown') for doc in result["source_documents"]]
+                                    print(f"Sources used: {sources}")
+                            else:
+                                print("No result from QA chain")
+                                bot_response = "Maaf, saya mengalami kesulitan memproses pertanyaan Anda. Mohon coba dengan kalimat yang berbeda."
+                                
+                        except Exception as qa_error:
+                            print(f"Error in QA chain: {str(qa_error)}")
+                            traceback.print_exc()
+                            
+                            # Fall back to Gemini direct call if QA chain fails
+                            if GEMINI_AVAILABLE:
+                                print("Falling back to direct Gemini call")
+                                model = genai.GenerativeModel(MODEL_NAME)
+                                prompt = f"""
+                                Kamu adalah Bot Susenas, asisten virtual khusus untuk Survei Sosial Ekonomi Nasional (Susenas).
+                                Jawab pertanyaan pengguna dengan bahasa Indonesia yang baik dan informatif.
+                                
+                                Pertanyaan: {content}
+                                
+                                Jawaban:
+                                """
+                                
+                                response = model.generate_content(prompt)
+                                if response and hasattr(response, 'text'):
+                                    bot_response = response.text.strip()
+                                else:
+                                    bot_response = "Maaf, saya mengalami kesulitan memproses permintaan Anda."
+                            else:
+                                bot_response = "Maaf, saya mengalami kesulitan dengan sistem pengetahuan saya. Silakan coba lagi nanti."
+                    elif GEMINI_AVAILABLE:
+                        # Direct call to Gemini if QA chain isn't available
+                        print("QA chain not available, using direct Gemini call")
+                        model = genai.GenerativeModel(MODEL_NAME)
+                        prompt = f"""
+                        Kamu adalah Bot Susenas, asisten virtual khusus untuk Survei Sosial Ekonomi Nasional (Susenas).
+                        Jawab pertanyaan pengguna dengan bahasa Indonesia yang baik dan informatif. 
+                        Jika tidak yakin dengan jawaban, katakan "Maaf, saya tidak memiliki informasi yang cukup untuk menjawab pertanyaan tersebut dengan akurat."
+                        
+                        Pertanyaan: {content}
+                        
+                        Jawaban:
+                        """
+                        
+                        response = model.generate_content(prompt)
+                        if response and hasattr(response, 'text'):
+                            bot_response = response.text.strip()
+                        else:
+                            bot_response = "Maaf, saya mengalami kesulitan memproses permintaan Anda."
+                    else:
+                        bot_response = "Maaf, sistem pengetahuan saya sedang tidak tersedia saat ini. Silakan coba lagi nanti."
+                except Exception as e:
+                    print(f"Knowledge base error: {str(e)}")
+                    traceback.print_exc()
+                    bot_response = f"Maaf, terjadi kesalahan dalam mengakses basis pengetahuan: {str(e)}"
+        
+        # Save bot response - Using AUTO_INCREMENT for id
+        verified = False
+        try:
+            cursor.execute(
+                "INSERT INTO messages (chat_id, message, sender, is_from_corrected) VALUES (%s, %s, %s, %s)",
+                (chat_id, bot_response, 'bot', is_from_correction)
+            )
+            conn.commit()
+            
+            # Jika jawaban berasal dari koreksi admin, tandai chat ini sebagai verified
+            if is_from_correction:
+                verified = True
+                cursor.execute(
+                    "UPDATE chats SET verified = TRUE WHERE id = %s",
+                    (chat_id,)
+                )
+                conn.commit()
+        except Exception as e:
+            print(f"Error saving bot response: {str(e)}")
+            # Continue even if saving fails
+        
+        print(f"Responded with: {bot_response[:100]}...")
+        
+        # Return response
+        return jsonify({
+            "success": True,
+            "message": bot_response,
+            "verified": verified,
+            "is_from_correction": is_from_correction
+        }), 200
+        
+    except Exception as e:
+        print(f"Chat error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing database connection: {str(close_error)}")
+    
+@app.route('/verify/<chat_id>', methods=['POST'])
+@jwt_required()
+def verify_chat(chat_id):
+    try:
+        user_id = get_jwt_identity()
+        
+        # Check if user is admin
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required"}), 403
+            
+        # Get the chat and its messages
+        cursor.execute("""
+            SELECT c.id, c.user_id, c.created_at, c.verified, c.verified_at,
+                   m.id as message_id, m.message, m.sender, m.created_at as message_time
+            FROM chats c
+            LEFT JOIN messages m ON c.id = m.chat_id
+            WHERE c.id = %s
+            ORDER BY m.created_at ASC
+        """, (chat_id,))
+        
+        results = cursor.fetchall()
+        
+        if not results:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Chat not found"}), 404
+        
+        # Update chat verification status
+        current_time = datetime.now()
+        cursor.execute(
+            "UPDATE chats SET verified = TRUE, verified_at = %s, verified_by = %s WHERE id = %s",
+            (current_time, user_id, chat_id)
+        )
+        conn.commit()
+        
+        # Format the response
+        chat = {
+            "id": results[0]['id'],
+            "user_id": results[0]['user_id'],
+            "created_at": results[0]['created_at'].isoformat() if results[0]['created_at'] else None,
+            "verified": True,
+            "verified_at": current_time.isoformat(),
+            "verified_by": user_id
+        }
+        
+        messages = []
+        if results[0]['message_id'] is not None:  # Only add messages if they exist
+            for row in results:
+                messages.append({
+                    "id": row['message_id'],
+                    "message": row['message'],
+                    "sender": row['sender'],
+                    "created_at": row['message_time'].isoformat() if row['message_time'] else None
+                })
+        
+        return jsonify({
+            "success": True,
+            "chat": chat,
+            "messages": messages
+        }), 200
+        
+    except Exception as e:
+        print(f"Verify chat error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing database connection: {str(close_error)}")
+
+# cek udah diverif apa belum (3 juni)
+@app.route('/chat/<chat_id>/status', methods=['GET'])
+@jwt_required()
+def chat_status(chat_id):
+    user_id = get_jwt_identity()
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT verified FROM chats WHERE id = %s AND user_id = %s", (chat_id, user_id))
+    chat = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not chat:
+        return jsonify({"error": "Chat not found"}), 404
+
+    return jsonify({
+        "success": True,
+        "verified": chat.get('verified', False)
+    }), 200
+# last chat cek udah diverif apa belum (3 juni)
+
+@app.route('/admin/chats', methods=['GET'])
+@jwt_required()
+def admin_chats():
+    try:
+        current_user = get_jwt_identity()
+        
+        # Check if user is admin
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT role FROM users WHERE id = %s", (current_user,))
+        user = cursor.fetchone()
+        
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required"}), 403
+        
+        # Get all chats with message counts - Fix the GROUP BY issue
+        cursor.execute("""
+            SELECT c.id, c.user_id, c.created_at, c.verified, u.username,
+                  CAST((SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) AS UNSIGNED) as message_count,
+                  (SELECT MAX(m.created_at) FROM messages m WHERE m.chat_id = c.id) as last_message_time,
+                  (SELECT message FROM messages m WHERE m.chat_id = c.id AND m.sender = 'bot' ORDER BY m.created_at DESC LIMIT 1) as last_bot_message,
+                  (SELECT message FROM messages m WHERE m.chat_id = c.id AND m.sender = 'user' ORDER BY m.created_at DESC LIMIT 1) as last_user_message
+            FROM chats c 
+            JOIN users u ON c.user_id = u.id
+            ORDER BY COALESCE(last_message_time, c.created_at) DESC
+        """)
+        
+        chats = cursor.fetchall()
+        
+        # Print counts for debugging
+        for chat in chats:
+            print(f"Chat {chat['id']}: {chat['message_count']} messages, type: {type(chat['message_count'])}")
+            # Ensure message_count is always an integer
+            if chat['message_count'] is not None:
+                chat['message_count'] = int(chat['message_count'])
+            else:
+                chat['message_count'] = 0
+            
+            # Truncate long messages for preview
+            if chat['last_bot_message'] and len(chat['last_bot_message']) > 100:
+                chat['last_bot_message'] = chat['last_bot_message'][:100] + '...'
+                
+            if chat['last_user_message'] and len(chat['last_user_message']) > 100:
+                chat['last_user_message'] = chat['last_user_message'][:100] + '...'
+            
+        # Convert datetime objects to string
+        for chat in chats:
+            chat['created_at'] = chat['created_at'].isoformat() if chat['created_at'] else None
+            if 'last_message_time' in chat and chat['last_message_time']:
+                chat['last_message_time'] = chat['last_message_time'].isoformat()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "chats": chats
+        }), 200
+        
+    except Exception as e:
+        print(f"Admin chats error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing database connection: {str(close_error)}")
+
+@app.route('/admin/get_file', methods= ["GET"])
+@jwt_required()
+def admin_get_file():
+    try:
+        current_user = get_jwt_identity()
+        
+        # Check if user is admin
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT role FROM users WHERE id = %s", (current_user,))
+        user = cursor.fetchone()
+        
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required"}), 403
+        
+        cursor.execute("""
+        SELECT * FROM knowledge_files
+        """)
+
+        files = cursor.fetchall()
+        
+        if not files:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "files not found"}), 404
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "files": files,
+        }), 200
+    except Exception as e:
+        print(e)
+
+@app.route('/admin/delete/<filename>', methods = ['GET'])
+@jwt_required()
+def admin_delete_file(filename):
+    global qa_chain
+    try:
+        current_user = get_jwt_identity()
+        
+        # Check if user is admin
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT role FROM users WHERE id = %s", (current_user,))
+        user = cursor.fetchone()
+        
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required"}), 403
+        
+        cursor.execute("""
+            DELETE FROM knowledge_files 
+            WHERE filename = %s
+        """, (filename,))
+
+        conn.commit()
+
+        if cursor.rowcount == 0:  # Check if the deletion was successful
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "File not found"}), 404
+
+        uploads_dir = os.getenv('UPLOADS_DIR', 'uploads')
+        file_path = os.path.join(uploads_dir, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)  # Delete the file from local storage
+            print(f"File {filename} deleted from local storage.")
+        else:
+            print(f"File {filename} not found in local storage.")
+
+        # Proses dokumen dan simpan FAISS index ulang
+        # Tentukan direktori tempat FAISS index disimpan
+        VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store')
+
+        # Tentukan nama file FAISS index yang ingin dihapus (index.faiss)
+        faiss_index_file = os.path.join(VECTOR_STORE_DIR, 'index.faiss')
+
+        # Periksa apakah file FAISS ada, lalu hapus
+        if os.path.exists(faiss_index_file):
+            os.remove(faiss_index_file)
+            print(f"FAISS index file '{faiss_index_file}' telah dihapus.")
+        else:
+            print("FAISS index file tidak ditemukan.")
+            
+        documents = process_documents_from_uploads(deleted_filename = filename)
+
+        if documents:
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+            vector_store = FAISS.from_documents(documents, embeddings)
+            vector_store.save_local(VECTOR_STORE_DIR)
+            print("Vector store updated and saved after upload")
+            
+            # Perbarui QA chain agar pencarian bisa pakai vector store baru
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            
+            PROMPT = PromptTemplate(
+                template="""
+                Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+
+                {context}
+
+                Pertanyaan: {question}
+
+                Jawaban yang akurat dan relevan:
+                """,
+                input_variables=["context", "question"],
+            )
+
+            llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
+
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": PROMPT}
+            )
+
+        else:
+            print("No documents processed during upload.")
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+        }), 200
+    
+    except Exception as e:
+        print(e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/admin/chat/<chat_id>', methods=['GET'])
+@jwt_required()
+def admin_get_chat(chat_id):
+    try:
+        current_user = get_jwt_identity()
+        
+        # Check if user is admin
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT role FROM users WHERE id = %s", (current_user,))
+        user = cursor.fetchone()
+        
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required"}), 403
+        
+        # Get chat details
+        cursor.execute("""
+            SELECT c.id, c.user_id, c.created_at, c.verified, u.username
+            FROM chats c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.id = %s
+        """, (chat_id,))
+        
+        chat = cursor.fetchone()
+        
+        if not chat:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Chat not found"}), 404
+        
+        # Get messages with message IDs
+        cursor.execute("""
+            SELECT id, message, sender, created_at, is_corrected, is_correction
+            FROM messages
+            WHERE chat_id = %s
+            ORDER BY created_at ASC
+        """, (chat_id,))
+        
+        messages = cursor.fetchall()
+        print(f"Retrieved {len(messages)} messages for chat {chat_id}")
+        
+        # Convert datetime objects to string
+        chat['created_at'] = chat['created_at'].isoformat() if chat['created_at'] else None
+        for message in messages:
+            message['created_at'] = message['created_at'].isoformat() if message['created_at'] else None
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "chat": chat,
+            "messages": messages
+        }), 200
+
+    except Exception as e:
+        print(f"Admin get chat error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing database connection: {str(close_error)}")
+
+# Add a new route for the plural form that was being incorrectly called
+@app.route('/admin/chats/<chat_id>', methods=['GET'])
+@jwt_required()
+def admin_get_chat_plural(chat_id):
+    """Alias for admin_get_chat to handle the plural form of the URL"""
+    return admin_get_chat(chat_id)
+
+@app.route('/upload', methods=['POST'])
+@jwt_required()
+def upload_file():
+    global qa_chain
+    try:
+        user_id = get_jwt_identity()
+
+        # Cek admin
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required for uploading"}), 403
+
+        # Cek file yang diunggah
+        file = request.files.get('file')
+        if not file:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "No file uploaded"}), 400
+
+        # Simpan file di direktori uploads
+        uploads_dir = os.getenv('UPLOADS_DIR', 'uploads')
+        os.makedirs(uploads_dir, exist_ok=True)
+        secure_name = secure_filename(file.filename)
+        file_path = os.path.join(uploads_dir, secure_name)
+        file.save(file_path)
+
+        # Tentukan tipe file
+        file_type = 'unknown'
+        if secure_name.lower().endswith('.pdf'):
+            file_type = 'pdf'
+        elif secure_name.lower().endswith(('.xlsx', '.xls')):
+            file_type = 'excel'
+        elif secure_name.lower().endswith('.csv'):
+            file_type = 'csv'
+        elif secure_name.lower().endswith('.txt'):
+            file_type = 'text'
+
+        # Proses file untuk mengekstrak konten berdasarkan tipe file
+        content = None
+        try:
+            if file_type == 'pdf':
+                content = extract_text_from_pdf(file_path)
+            elif file_type == 'excel':
+                excel_data = extract_data_from_excel(file_path)
+                content = json.dumps(excel_data, ensure_ascii=False, default=str)
+            elif file_type in ['csv', 'text']:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+        except Exception as e:
+            content = f"Error processing file: {str(e)}"
+
+        # Simpan file di database
+        try:
+            cursor.execute("DESCRIBE knowledge_files")
+            columns = cursor.fetchall()
+            column_names = [col['Field'] for col in columns]
+
+            if 'content' in column_names:
+                cursor.execute(
+                    "INSERT INTO knowledge_files (filename, file_type, content, uploaded_by) VALUES (%s, %s, %s, %s)",
+                    (secure_name, file_type, content, user_id)
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
+                    (secure_name, file_type, user_id)
+                )
+
+            conn.commit()
+
+        except Exception as e:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
+
+        # Proses dokumen dan simpan FAISS index ulang
+        documents = process_documents_from_uploads()
+
+        if documents:
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+            vector_store = FAISS.from_documents(documents, embeddings)
+            vector_store.save_local(VECTOR_STORE_DIR)
+            print("Vector store updated and saved after upload")
+            
+            # Perbarui QA chain agar pencarian bisa pakai vector store baru
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            
+            PROMPT = PromptTemplate(
+                template="""
+                Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+
+                {context}
+
+                Pertanyaan: {question}
+
+                Jawaban yang akurat dan relevan:
+                """,
+                input_variables=["context", "question"],
+            )
+
+            llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
+
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": PROMPT}
+            )
+
+        else:
+            print("No documents processed during upload.")
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "message": "File uploaded, saved in database, and RAG generated successfully.",
+            "file": {
+                "name": secure_name,
+                "type": file_type
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"Error uploading file: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# Alias route for admin/upload
+@app.route('/admin/upload', methods=['POST'])
+@jwt_required()
+def admin_upload_file():
+    """Alias for upload_file"""
+    return upload_file()
+
+@app.route('/test', methods=['GET', 'POST'])
+def test():
+    """Simple test endpoint that doesn't require authentication"""
+    return jsonify({
+        "success": True,
+        "message": "Test endpoint working",
+        "method": request.method
+    })
+
+@app.route('/correct/<message_id>', methods=['POST'])
+@jwt_required()
+def correct_message(message_id):
+    try:
+        user_id = get_jwt_identity()
+        # Terima parameter 'correction' atau 'corrected_message' dari frontend
+        correction = request.json.get('correction') or request.json.get('corrected_message')
+        
+        if not correction:
+            return jsonify({"error": "Correction text is required"}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required"}), 403
+        
+        # Get the original message
+        cursor.execute(
+            "SELECT chat_id, message, sender FROM messages WHERE id = %s", 
+            (message_id,)
+        )
+        
+        message = cursor.fetchone()
+        if not message:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Message not found"}), 404
+            
+        if message['sender'] != 'bot':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Only bot messages can be corrected"}), 400
+        
+        # Mark original message as corrected
+        cursor.execute(
+            "UPDATE messages SET is_corrected = TRUE WHERE id = %s",
+            (message_id,)
+        )
+        
+        # Sederhanakan proses dengan INSERT tanpa menggunakan custom UUID - gunakan AUTO_INCREMENT
+        # yang sudah ada di tabel messages
+        cursor.execute(
+            """INSERT INTO messages 
+                (chat_id, message, sender, is_correction, corrected_message_id, corrected_by) 
+                VALUES (%s, %s, 'bot', TRUE, %s, %s)""",
+            (message['chat_id'], correction, message_id, user_id)
+        )
+        
+        # Get the auto-generated ID
+        cursor.execute("SELECT LAST_INSERT_ID()")
+        result = cursor.fetchone()
+        correction_id = result['LAST_INSERT_ID()'] if result else None
+        
+        conn.commit()
+        
+        # Also update the chat to mark it as verified
+        try:
+            cursor.execute(
+                "UPDATE chats SET verified = TRUE, verified_at = %s, verified_by = %s WHERE id = %s",
+                (datetime.now(), user_id, message['chat_id'])
+            )
+            conn.commit()
+        except Exception as verify_error:
+            print(f"Warning: Could not update chat verification status: {str(verify_error)}")
+        
+        return jsonify({
+            "success": True,
+            "message": {
+                "corrected_message": correction,
+                "id": correction_id
+            },
+            "correction_id": correction_id
+        }), 200
+        
+    except Exception as e:
+        print(f"Correction error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing database connection: {str(close_error)}")
+    
+@app.route('/chats', methods=['GET'])
+@jwt_required()
+def get_chats():
+    try:
+        user_id = get_jwt_identity()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Get all user's chats
+        cursor.execute(
+            """
+            SELECT c.id, c.title, c.created_at, c.verified, c.verified_at,
+                   (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) as message_count,
+                   (SELECT message FROM messages m WHERE m.chat_id = c.id ORDER BY m.created_at DESC LIMIT 1) as last_message
+            FROM chats c
+            WHERE c.user_id = %s
+            ORDER BY c.created_at DESC
+            """,
+            (user_id,)
+        )
+        
+        chats = cursor.fetchall()
+        
+        # Format the response
+        formatted_chats = []
+        for chat in chats:
+            formatted_chat = {
+                "id": chat['id'],
+                "title": chat['title'],
+                "created_at": chat['created_at'].isoformat() if chat['created_at'] else None,
+                "verified": bool(chat['verified']),
+                "verified_at": chat['verified_at'].isoformat() if chat['verified_at'] else None,
+                "message_count": chat['message_count'],
+                "last_message": chat['last_message']
+            }
+            formatted_chats.append(formatted_chat)
+        
+        return jsonify({
+            "success": True,
+            "chats": formatted_chats
+        }), 200
+        
+    except Exception as e:
+        print(f"Get chats error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except:
+            pass
+
+@app.route('/chat/<chat_id>/messages', methods=['GET'])
+@jwt_required()
+def get_chat_messages(chat_id):
+    try:
+        user_id = get_jwt_identity()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verify chat belongs to user
+        cursor.execute(
+            "SELECT id FROM chats WHERE id = %s AND user_id = %s",
+            (chat_id, user_id)
+        )
+        
+        chat = cursor.fetchone()
+        if not chat:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Chat not found or access denied"}), 404
+        
+        # Get messages
+        cursor.execute(
+            """SELECT id, message, sender, created_at, is_corrected, is_correction,
+                  corrected_message_id 
+               FROM messages 
+               WHERE chat_id = %s 
+               ORDER BY created_at ASC""",
+            (chat_id,)
+        )
+        
+        messages = cursor.fetchall()
+        
+        # Format messages
+        formatted_messages = []
+        for msg in messages:
+            formatted_message = {
+                "id": msg['id'],
+                "message": msg['message'],
+                "sender": msg['sender'],
+                "created_at": msg['created_at'].isoformat() if msg['created_at'] else None,
+                "is_corrected": bool(msg['is_corrected']),
+                "is_correction": bool(msg['is_correction']),
+                "corrected_message_id": msg['corrected_message_id']
+            }
+            formatted_messages.append(formatted_message)
+        
+        return jsonify({
+            "success": True,
+            "chat_id": chat_id,
+            "messages": formatted_messages
+        }), 200
+        
+    except Exception as e:
+        print(f"Get chat messages error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing database connection: {str(close_error)}")
+
+@app.route('/schema/check', methods=['GET'])
+def check_schema():
+    """Verify and update the database schema if needed"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if messages table has auto_increment for id
+        cursor.execute("SHOW CREATE TABLE messages")
+        table_schema = cursor.fetchone()[1]
+        
+        # Check if we need to modify the schema
+        if 'AUTO_INCREMENT' not in table_schema or 'id` VARCHAR(36)' in table_schema:
+            print("Updating messages table schema to use AUTO_INCREMENT INT primary key")
+            try:
+                # Drop the existing primary key constraint
+                cursor.execute("ALTER TABLE messages DROP PRIMARY KEY")
+                
+                # Modify the id column to be INT AUTO_INCREMENT
+                cursor.execute("ALTER TABLE messages MODIFY id INT AUTO_INCREMENT PRIMARY KEY")
+                conn.commit()
+                print("Successfully updated messages table schema")
+            except Exception as alter_error:
+                print(f"Error updating messages table schema: {str(alter_error)}")
+                # If the update fails, create a new table with correct schema and migrate data
+                try:
+                    cursor.execute("""
+                    CREATE TABLE messages_new (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        chat_id VARCHAR(36) NOT NULL,
+                        sender VARCHAR(10) NOT NULL,
+                        message TEXT NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        is_corrected BOOLEAN DEFAULT FALSE,
+                        is_correction BOOLEAN DEFAULT FALSE,
+                        corrected_message_id INT,
+                        corrected_by VARCHAR(36),
+                        FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+                        FOREIGN KEY (corrected_by) REFERENCES users(id) ON DELETE SET NULL
+                    )
+                    """)
+                    
+                    # Copy existing data if any
+                    cursor.execute("""
+                    INSERT INTO messages_new 
+                    (chat_id, sender, message, created_at, is_corrected, is_correction, corrected_message_id, corrected_by)
+                    SELECT chat_id, sender, message, created_at, is_corrected, is_correction, corrected_message_id, corrected_by
+                    FROM messages
+                    """)
+                    
+                    # Replace old table with new one
+                    cursor.execute("DROP TABLE messages")
+                    cursor.execute("RENAME TABLE messages_new TO messages")
+                    conn.commit()
+                    print("Created new messages table with correct schema and migrated data")
+                except Exception as migration_error:
+                    print(f"Error migrating messages data: {str(migration_error)}")
+                    conn.rollback()
+        
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error checking schema: {str(e)}")
+        print(traceback.format_exc())
+        return False
+
+@app.route('/test/message', methods=['POST'])
+def test_message():
+    """Simple test endpoint for messaging without JWT requirement"""
+    try:
+        data = request.json
+        message = data.get('message', 'No message provided')
+        
+        return jsonify({
+            "success": True,
+            "message": "Test message received",
+            "your_message": message,
+            "response": f"You said: {message}",
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/debug/request', methods=['GET', 'POST', 'OPTIONS'])
+def debug_request():
+    """Print and return request details for debugging"""
+    try:
+        # Get request details
+        method = request.method
+        headers = dict(request.headers)
+        args = dict(request.args)
+        
+        # Safe extraction of body content
+        body = None
+        if request.data:
+            try:
+                if 'application/json' in request.headers.get('Content-Type', ''):
+                    body = request.get_json(silent=True)
+                else:
+                    body = request.data.decode('utf-8')
+            except:
+                body = "Could not decode request body"
+        
+        # Get form data if present
+        form_data = dict(request.form) if request.form else None
+        
+        # Construct response
+        response_data = {
+            "success": True,
+            "request": {
+                "method": method,
+                "path": request.path,
+                "headers": headers,
+                "query_args": args,
+                "body": body,
+                "form_data": form_data
+            }
+        }
+        
+        # Log the details
+        print(f"DEBUG REQUEST: {method} {request.path}")
+        print(f"Headers: {headers}")
+        print(f"Body: {body}")
+        print(f"Form: {form_data}")
+        
+        return jsonify(response_data)
+    except Exception as e:
+        return jsonify({
+            "success": False, 
+            "error": str(e)
+        }), 500
+
+@app.route('/chat/quick', methods=['GET'])
+@jwt_required()
+def quick_create_chat():
+    """Create a new chat using GET request, no body needed"""
+    try:
+        user_id = get_jwt_identity()
+        print(f"Creating quick chat for user: {user_id}")
+        
+        # Connect to database
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Generate chat ID
+        chat_id = str(uuid.uuid4())
+        print(f"Generated quick chat ID: {chat_id}")
+        
+        # Insert chat with bare minimum fields
+        try:
+            cursor.execute(
+                "INSERT INTO chats (id, user_id, created_at) VALUES (%s, %s, %s)",
+                (chat_id, user_id, datetime.now())
+            )
+            conn.commit()
+            print(f"Quick chat created successfully: {chat_id}")
+            
+            # Return success with CORS headers explicitly set
+            response = jsonify({
+                "success": True,
+                "chat_id": chat_id,
+                "message": "Chat created successfully"
+            })
+            return response, 201
+            
+        except Exception as db_error:
+            print(f"Database error creating chat: {str(db_error)}")
+            return jsonify({"error": f"Failed to create chat: {str(db_error)}"}), 500
+            
+    except Exception as e:
+        print(f"Quick chat creation error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": f"Failed to create quick chat: {str(e)}"}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing database connection: {str(close_error)}")
+
+@app.route('/debug/frontend-issue', methods=['GET', 'POST'])
+def frontend_issue_tracker():
+    """Endpoint to track frontend issues with chat creation"""
+    try:
+        # Log as much info as possible about the request
+        data = {
+            "timestamp": datetime.now().isoformat(),
+            "method": request.method,
+            "path": request.path,
+            "headers": dict(request.headers),
+            "remote_addr": request.remote_addr,
+            "user_agent": request.user_agent.string,
+            "is_xhr": request.is_xhr,
+            "url": request.url,
+            "query_string": request.query_string.decode('utf-8')
+        }
+        
+        # Check for JSON body
+        if 'application/json' in request.headers.get('Content-Type', ''):
+            try:
+                data["json_body"] = request.get_json(silent=True)
+            except:
+                data["json_body"] = "Error parsing JSON"
+                
+        # Check for form data
+        if request.form:
+            data["form_data"] = dict(request.form)
+            
+        # Check for query params
+        if request.args:
+            data["query_params"] = dict(request.args)
+            
+        # Try to extract auth token
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header[7:]  # Remove 'Bearer ' prefix
+            data["auth_token_present"] = True
+            data["auth_token_length"] = len(token)
+            try:
+                from flask_jwt_extended import decode_token
+                decoded = decode_token(token)
+                data["token_identity"] = decoded['sub']
+                data["token_valid"] = True
+            except Exception as token_error:
+                data["token_error"] = str(token_error)
+                data["token_valid"] = False
+        else:
+            data["auth_token_present"] = False
+            
+        # Log the data for debugging
+        print("FRONTEND ISSUE DATA:")
+        print(json.dumps(data, indent=2))
+        
+        # Return useful information
+        return jsonify({
+            "success": True,
+            "message": "Issue data logged successfully",
+            "issue_type": request.args.get('type', 'unknown'),
+            "data": data
+        })
+        
+    except Exception as e:
+        print(f"Error tracking frontend issue: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.after_request
+def after_request(response):
+    """Add CORS headers to every response"""
+    origin = request.headers.get('Origin', '*')
+    response.headers.add('Access-Control-Allow-Origin', origin)
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+    
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def handle_preflight(path):
+    """Handle CORS preflight requests for any route"""
+    response = app.make_default_options_response()
+    return response
+
+@app.route('/chat/simpleNew', methods=['GET'])
+def simple_create_chat():
+    """Create a new chat with token in query parameters, no JWT required"""
+    try:
+        # Get token from query parameter
+        token = request.args.get('token')
+        
+        if not token:
+            return jsonify({"error": "No token provided"}), 401
+            
+        # Manually decode JWT token
+        try:
+            from flask_jwt_extended import decode_token
+            decoded = decode_token(token)
+            user_id = decoded['sub']  # 'sub' contains the identity in JWT
+            print(f"Decoded token for user_id: {user_id}")
+        except Exception as e:
+            print(f"Token decoding error: {str(e)}")
+            return jsonify({"error": "Invalid token"}), 401
+            
+        print(f"Creating simple chat for user: {user_id}")
+        
+        # Connect to database
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verify user exists
+        cursor.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "User not found"}), 404
+            
+        # Generate chat ID
+        chat_id = str(uuid.uuid4())
+        print(f"Generated chat ID: {chat_id}")
+        
+        # Create chat with minimal fields, without 'title' column
+        try:
+            cursor.execute(
+                "INSERT INTO chats (id, user_id, created_at) VALUES (%s, %s, %s)",
+                (chat_id, user_id, datetime.now())
+            )
+            conn.commit()
+            print(f"Simple chat created successfully: {chat_id}")
+            
+            return jsonify({
+                "success": True,
+                "chat_id": chat_id,
+                "message": "Chat created successfully"
+            }), 201
+            
+        except Exception as db_error:
+            print(f"Database error creating chat: {str(db_error)}")
+            return jsonify({"error": f"Failed to create chat: {str(db_error)}"}), 500
+            
+    except Exception as e:
+        print(f"Simple chat creation error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except Exception as close_error:
+            print(f"Error closing connection: {str(close_error)}")
+
+# Endpoint to rebuild vector store (for admin use)
+@app.route('/rebuild-knowledge', methods=['POST'])
+@jwt_required()
+def rebuild_knowledge():
+    try:
+        user_id = get_jwt_identity()
+        
+        # Check if user is admin
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user or user['role'] != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+        
+        # First try to delete the existing vector store files
+        try:
+            for file in os.listdir(VECTOR_STORE_DIR):
+                file_path = os.path.join(VECTOR_STORE_DIR, file)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"Deleted {file_path}")
+        except Exception as del_error:
+            print(f"Error cleaning vector store directory: {str(del_error)}")
+        
+        # Reinitialize the vector store
+        success = initialize_vector_store()
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Knowledge base rebuilt successfully"
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to rebuild knowledge base"
+            }), 500
+    
+    except Exception as e:
+        print(f"Error rebuilding knowledge base: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'conn' in locals() and conn:
+                conn.close()
+        except:
+            pass
+
+if __name__ == '__main__':
+    app.run(debug=True)
