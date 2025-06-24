@@ -11,3 +11,4 @@ python-docx==0.8.11
 pandas
 langchain
 faiss-cpu
+langchain-community
