@@ -11,5 +11,8 @@ python-docx==0.8.11
 pandas
 langchain
 faiss-cpu
-langchain-community
-langchain-google-genai
+google-generativeai>=0.3.2
+langchain==0.1.16
+langchain-core==0.1.35
+langchain-google-genai==0.0.5
+pydantic==2.6.4
