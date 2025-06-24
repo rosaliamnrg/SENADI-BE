@@ -13,6 +13,6 @@ faiss-cpu
 google-generativeai
 langchain
 langchain-core
-langchain-google-genai
+langchain-google-genai>=0.0.5
 langchain-community
 pydantic
