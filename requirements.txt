@@ -12,3 +12,4 @@ pandas
 langchain
 faiss-cpu
 langchain-community
+langchain-google-genai
