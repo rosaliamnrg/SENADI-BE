@@ -79,7 +79,9 @@ VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store')
 os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
 
 # Initialize Flask app
+print("Flask app loaded")
 app = Flask(__name__)
+print("Flask app initialized")
 CORS(app, 
     resources={r"/*": {
         "origins": "*", 
@@ -565,12 +567,12 @@ def register():
         # Note: In production, passwords should be hashed with bcrypt
         
         # Generate user ID
-        user_id = str(uuid.uuid4())
+        # user_id = str(uuid.uuid4())
         
         # Insert user into database (default role = 'user')
         cursor.execute(
             "INSERT INTO users (id, username, email, password, role) VALUES (%s, %s, %s, %s, %s)",
-            (user_id, username, email, password, 'user')
+            (username, email, password, 'user')
         )
         conn.commit()
         
