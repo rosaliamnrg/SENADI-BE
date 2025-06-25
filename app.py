@@ -104,7 +104,7 @@ text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=15
 
 # Configure database
 def get_db_connection():
-    db_name = os.getenv('DB_NAME', )
+    db_name = os.getenv('DB_NAME', 'chatbot.susenas')
     print(f"Connecting to database: {db_name}")
     return mysql.connector.connect(
         host=os.getenv('DB_HOST', 'localhost'),
@@ -2132,7 +2132,11 @@ def rebuild_knowledge():
         except:
             pass
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
+@app.route("/")
+def hello():
+    return "Halo railway!"
+
+# if __name__ == '__main__':
+#     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
     # app.run(debug=True)
     # pass
