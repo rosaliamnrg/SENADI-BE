@@ -104,12 +104,13 @@ text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=15
 
 # Configure database
 def get_db_connection():
-    db_name = os.getenv('DB_NAME', 'chatbot.susenas')
+    # db_name = os.getenv('DB_NAME', 'chatbot.susenas')
+    db_name = os.getenv('DB_NAME', os.getenv("MYSQL_DATABASE"))
     print(f"Connecting to database: {db_name}")
     return mysql.connector.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        user=os.getenv('DB_USER', 'root'), 
-        password=os.getenv('DB_PASSWORD', ''),
+        host=os.getenv('DB_HOST', os.getenv("MYSQLHOST")),
+        user=os.getenv('DB_USER', os.getenv("MYSQLUSER")), 
+        password=os.getenv('DB_PASSWORD', os.getenv("MYSQLPASSWORD")),
         database=db_name
     )
 
