@@ -572,7 +572,7 @@ def register():
         
         # Insert user into database (default role = 'user')
         cursor.execute(
-            "INSERT INTO users (username, email, password, role) VALUES (%s, %s, %s, %s, %s)",
+            "INSERT INTO users (username, email, password, role) VALUES (%s, %s, %s, %s)",
             (username, email, password, 'user')
         )
         conn.commit()
