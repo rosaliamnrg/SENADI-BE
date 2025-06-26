@@ -627,16 +627,12 @@ def login():
         user = cursor.fetchone()
         
         if not user:
-            cursor.close()
-            conn.close()
             return jsonify({"error": "Invalid email or password"}), 401
-            
-        # Plain text password comparison (for existing database)
-        if password != user['password']:
-            cursor.close()
-            conn.close()
+        
+        # Compare hashed password using bcrypt
+        if not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
             return jsonify({"error": "Invalid email or password"}), 401
-            
+        
         # Generate JWT token
         token = create_access_token(identity=user['id'])
         
@@ -653,7 +649,7 @@ def login():
                 "is_admin": is_admin
             }
         }), 200
-        
+
     except Exception as e:
         print(f"Login error: {str(e)}")
         print(traceback.format_exc())
