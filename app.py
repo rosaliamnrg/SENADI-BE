@@ -704,8 +704,8 @@ def create_chat():
         print(f"User found: {user['username']}")
         
         # Generate chat ID
-        chat_id = str(uuid.uuid4())
-        print(f"Generated chat ID: {chat_id}")
+        # chat_id = str(uuid.uuid4())
+        # print(f"Generated chat ID: {chat_id}")
         
         # Fetch table structure to determine available columns
         cursor.execute("DESCRIBE chats")
@@ -714,8 +714,10 @@ def create_chat():
         print(f"Available columns in chats table: {column_names}")
         
         # Prepare insert query based on available columns
-        insert_columns = ['id', 'user_id']
-        insert_values = [chat_id, user_id]
+        # insert_columns = ['id', 'user_id']
+        insert_columns = ['user_id']
+        # insert_values = [chat_id, user_id]
+        insert_values = [user_id]
         
         if 'title' in column_names:
             insert_columns.append('title')
@@ -734,6 +736,8 @@ def create_chat():
         # Execute the insert
         cursor.execute(insert_query, insert_values)
         conn.commit()
+        
+        chat_id = cursor.lastrowid
         
         print(f"Chat created successfully: {chat_id}")
         
