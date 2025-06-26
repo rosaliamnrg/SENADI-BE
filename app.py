@@ -10,7 +10,7 @@ import google.generativeai as genai
 import json
 import bcrypt
 import re
-from datetime import datetime, timedeltaf
+from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 import pandas as pd
@@ -93,7 +93,7 @@ CORS(app,
 
 # Configure JWT
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-in-production')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedeltaf(days=7)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies', 'query_string']
 app.config['JWT_HEADER_NAME'] = 'Authorization'
 app.config['JWT_HEADER_TYPE'] = 'Bearer'
