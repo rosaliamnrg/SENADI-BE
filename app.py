@@ -534,9 +534,11 @@ def register():
         username = data.get('username')
         email = data.get('email')
         password = data.get('password')
-    
+
+        hash_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8') if password else None
+        
         # Validate required fields
-        if not username or not email or not password:
+        if not username or not email or not hash_password:
             return jsonify({"error": "Username, email and password are required"}), 400
             
         # Validate email format
@@ -571,9 +573,11 @@ def register():
         # user_id = str(uuid.uuid4())
         
         # Insert user into database (default role = 'user')
+        
+        print("Registering: ", username, email, hash_password)
         cursor.execute(
             "INSERT INTO users (username, email, password, role) VALUES (%s, %s, %s, %s)",
-            (username, email, password, 'user')
+            (username, email, hash_password, 'user',)
         )
         conn.commit()
         user_id = cursor.lastrowid
