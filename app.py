@@ -84,7 +84,7 @@ app = Flask(__name__)
 print("Flask app initialized")
 CORS(app, 
     resources={r"/*": {
-        "origins": "*", 
+        "origins": ["https://senadi.vercel.app"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"]
     }},
