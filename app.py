@@ -1,6 +1,6 @@
 # backend/app.py
 from flask import Flask, request, jsonify
-from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
+from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required, decode_token
 from flask_cors import CORS
 import mysql.connector
 import os
@@ -93,7 +93,7 @@ CORS(app,
 
 # Configure JWT
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-in-production')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedeltaf(days=7)
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies', 'query_string']
 app.config['JWT_HEADER_NAME'] = 'Authorization'
 app.config['JWT_HEADER_TYPE'] = 'Bearer'
@@ -1965,7 +1965,7 @@ def frontend_issue_tracker():
             data["auth_token_present"] = True
             data["auth_token_length"] = len(token)
             try:
-                from flask_jwt_extended import decode_token
+                # from flask_jwt_extended import decode_token
                 decoded = decode_token(token)
                 data["token_identity"] = decoded['sub']
                 data["token_valid"] = True
@@ -2024,7 +2024,7 @@ def simple_create_chat():
             
         # Manually decode JWT token
         try:
-            from flask_jwt_extended import decode_token
+            # from flask_jwt_extended import decode_token
             decoded = decode_token(token)
             user_id = decoded['sub']  # 'sub' contains the identity in JWT
             print(f"Decoded token for user_id: {user_id}")
