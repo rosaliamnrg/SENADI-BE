@@ -10,7 +10,7 @@ import google.generativeai as genai
 import json
 import bcrypt
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedeltaf
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 import pandas as pd
@@ -113,7 +113,8 @@ def get_db_connection():
         host=os.getenv('DB_HOST', os.getenv("MYSQLHOST")),
         user=os.getenv('DB_USER', os.getenv("MYSQLUSER")), 
         password=os.getenv('DB_PASSWORD', os.getenv("MYSQLPASSWORD")),
-        database=db_name
+        database=db_name,
+        port=int(os.getenv('DB_PORT', os.getenv('MYSQLPORT')))
     )
 
 # File processing utilities for knowledge base
