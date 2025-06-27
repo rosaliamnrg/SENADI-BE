@@ -671,13 +671,16 @@ def create_chat():
         print(f"Creating chat for user: {user_id}")
         
         # Check request content type
-        content_type = request.headers.get('Content-Type', '')
-        print(f"Request Content-Type: {content_type}")
+        # content_type = request.headers.get('Content-Type', '')
+        # print(f"Request Content-Type: {content_type}")
         
         # Handle different content types or empty requests
         # if 'application/json' in content_type and request.data:
         try:
-            data = request.get_json(silent=True) or {}
+            if request.is_json:
+                data = request.get_json(silent=True) or {}
+            else:
+                data = {}
             title = data.get('title', 'New Chat')
         except Exception as json_error:
             print(f"JSON parsing error: {str(json_error)}")
