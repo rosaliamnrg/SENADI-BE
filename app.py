@@ -669,7 +669,7 @@ def create_chat():
     try:
         user_id = get_jwt_identity()
         print(f"Creating chat for user: {user_id}")
-        
+        print("Data sent: ", request.get_json())
         # Check request content type
         # content_type = request.headers.get('Content-Type', '')
         # print(f"Request Content-Type: {content_type}")
