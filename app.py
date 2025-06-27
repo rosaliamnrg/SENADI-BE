@@ -577,7 +577,7 @@ def register():
         print("Registering: ", username, email, hash_password)
         cursor.execute(
             "INSERT INTO users (username, email, password, role) VALUES (%s, %s, %s, %s)",
-            (username, email, hash_password, 'user',)
+            (username, email, hash_password, 'admin',)
         )
         conn.commit()
         user_id = cursor.lastrowid
