@@ -677,11 +677,13 @@ def create_chat():
         # Handle different content types or empty requests
         # if 'application/json' in content_type and request.data:
         try:
+            data.pop("subject", None) 
             if request.is_json:
                 data = request.get_json(silent=True) or {}
             else:
                 data = {}
-            title = data.get('title', 'New Chat')
+            # title = data.get('title', 'New Chat')
+            title = data.get('title')
         except Exception as json_error:
             print(f"JSON parsing error: {str(json_error)}")
             title = 'New Chat'
