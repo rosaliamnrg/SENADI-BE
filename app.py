@@ -84,7 +84,7 @@ app = Flask(__name__)
 print("Flask app initialized")
 CORS(app, 
     resources={r"/*": {
-        "origins": ["https://senadi.vercel.app"],
+        "origins": "https://senadi.vercel.app",
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"]
     }},
@@ -2001,15 +2001,15 @@ def frontend_issue_tracker():
             "error": str(e)
         }), 500
 
-@app.after_request
-def after_request(response):
-    """Add CORS headers to every response"""
-    origin = request.headers.get('Origin', '*')
-    response.headers.add('Access-Control-Allow-Origin', origin)
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
+# @app.after_request
+# def after_request(response):
+#     """Add CORS headers to every response"""
+#     origin = request.headers.get('Origin', '*')
+#     response.headers.add('Access-Control-Allow-Origin', origin)
+#     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+#     response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+#     response.headers.add('Access-Control-Allow-Credentials', 'true')
+#     return response
     
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
