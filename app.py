@@ -1893,16 +1893,18 @@ def quick_create_chat():
         cursor = conn.cursor(dictionary=True)
         
         # Generate chat ID
-        chat_id = str(uuid.uuid4())
+        # chat_id = str(uuid.uuid4())
         print(f"Generated quick chat ID: {chat_id}")
         
         # Insert chat with bare minimum fields
         try:
             cursor.execute(
-                "INSERT INTO chats (id, user_id, created_at) VALUES (%s, %s, %s)",
-                (chat_id, user_id, datetime.now())
+                "INSERT INTO chats (user_id, created_at) VALUES (%s, %s)",
+                (user_id, datetime.now(),)
             )
             conn.commit()
+            
+            chat_id = cursor.lastrow
             print(f"Quick chat created successfully: {chat_id}")
             
             # Return success with CORS headers explicitly set
@@ -2052,16 +2054,18 @@ def simple_create_chat():
             return jsonify({"error": "User not found"}), 404
             
         # Generate chat ID
-        chat_id = str(uuid.uuid4())
+        # chat_id = str(uuid.uuid4())
         print(f"Generated chat ID: {chat_id}")
         
         # Create chat with minimal fields, without 'title' column
         try:
             cursor.execute(
-                "INSERT INTO chats (id, user_id, created_at) VALUES (%s, %s, %s)",
-                (chat_id, user_id, datetime.now())
+                "INSERT INTO chats (user_id, created_at) VALUES (%s, %s)",
+                (user_id, datetime.now(),)
             )
             conn.commit()
+            
+            chat_id = cursor.lastrow
             print(f"Simple chat created successfully: {chat_id}")
             
             return jsonify({
