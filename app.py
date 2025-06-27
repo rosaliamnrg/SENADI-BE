@@ -2031,6 +2031,7 @@ def simple_create_chat():
         token = request.args.get('token')
         
         if not token:
+            print("No token provided")
             return jsonify({"error": "No token provided"}), 401
             
         # Manually decode JWT token
