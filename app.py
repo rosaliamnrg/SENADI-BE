@@ -675,18 +675,18 @@ def create_chat():
         print(f"Request Content-Type: {content_type}")
         
         # Handle different content types or empty requests
-        if 'application/json' in content_type and request.data:
-            try:
-                data = request.get_json(silent=True) or {}
-                title = data.get('title', 'New Chat')
-            except Exception as json_error:
-                print(f"JSON parsing error: {str(json_error)}")
-                title = 'New Chat'
-        elif 'application/x-www-form-urlencoded' in content_type:
-            title = request.form.get('title', 'New Chat')
-        else:
-            # Default title for empty requests
+        # if 'application/json' in content_type and request.data:
+        try:
+            data = request.get_json(silent=True) or {}
+            title = data.get('title', 'New Chat')
+        except Exception as json_error:
+            print(f"JSON parsing error: {str(json_error)}")
             title = 'New Chat'
+        # elif 'application/x-www-form-urlencoded' in content_type:
+        #     title = request.form.get('title', 'New Chat')
+        # else:
+            # Default title for empty requests
+            # title = 'New Chat'
             
         print(f"Chat title: {title}")
         
