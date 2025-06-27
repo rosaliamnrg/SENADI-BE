@@ -582,7 +582,7 @@ def register():
         conn.commit()
         user_id = cursor.lastrowid
         # Generate JWT token
-        token = create_access_token(identity=user_id)
+        token = create_access_token(identity=str(user_id))
         
         return jsonify({
             "success": True,
@@ -634,7 +634,8 @@ def login():
             return jsonify({"error": "Invalid email or password"}), 401
         
         # Generate JWT token
-        token = create_access_token(identity=user['id'])
+        # token = create_access_token(identity=user['id'])
+        token = create_access_token(identity=str(user['id']))
         
         # Check if role is admin
         is_admin = user['role'] == 'admin'
