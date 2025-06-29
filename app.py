@@ -1345,7 +1345,7 @@ def admin_delete_file_github(filename):
             return jsonify({"error": "File not found in database"}), 404
 
         # 2. Hapus dari local storage
-        uploads_dir = os.getenv('UPLOADS_DIR', 'uploads')
+        uploads_dir = os.getenv('GITHUB_FOLDER_PATH')
         file_path = os.path.join(uploads_dir, filename)
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -1381,7 +1381,7 @@ def admin_delete_file_github(filename):
             print(f"GitHub file not found or error: {get_response.text}")
 
         # 4. Hapus FAISS index lama
-        VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store')
+        VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store/')
         faiss_index_file = os.path.join(VECTOR_STORE_DIR, 'index.faiss')
         if os.path.exists(faiss_index_file):
             os.remove(faiss_index_file)
