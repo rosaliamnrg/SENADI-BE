@@ -1406,6 +1406,7 @@ def upload_file_github():
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
+        user_name = user.get('username')
 
         if not user or user.get('role') != 'admin':
             cursor.close()
@@ -1488,8 +1489,8 @@ def upload_file_github():
             #         (filename, file_type, user_id,)
             #     )
             cursor.execute(
-                "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
-                (filename, file_type, user_id,)
+                "INSERT INTO knowledge_files (filename, file_type, uploaded_by, created_at) VALUES (%s, %s, %s, %s)",
+                (filename, file_type, user_name, datetime.now(), )
             )
             conn.commit()
         except Exception as db_err:
