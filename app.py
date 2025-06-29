@@ -1455,7 +1455,8 @@ def upload_file_github():
         }
         data = {
             "message": f"Upload {filename}",
-            "content": encoded_content
+            "content": encoded_content,
+            "branch": "uploads"
         }
 
         response = requests.put(api_url, headers=headers, json=data)
@@ -1513,12 +1514,12 @@ def upload_file_github():
                 PROMPT = PromptTemplate(
                     template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
 
-{context}
+                    {context}
 
-Pertanyaan: {question}
+                    Pertanyaan: {question}
 
-Jawaban yang akurat dan relevan:""",
-                    input_variables=["context", "question"],
+                    Jawaban yang akurat dan relevan:""",
+                                        input_variables=["context", "question"],
                 )
 
                 llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
