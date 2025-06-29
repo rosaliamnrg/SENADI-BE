@@ -1193,10 +1193,18 @@ def admin_get_file():
 
         files = cursor.fetchall()
         
+        # if not files:
+            # cursor.close()
+            # conn.close()
+            # return jsonify({"error": "files not found"}), 404
         if not files:
             cursor.close()
             conn.close()
-            return jsonify({"error": "files not found"}), 404
+            return jsonify({
+                "success": True,
+                "files": [],
+                "message": "Tidak ada file yang sudah dimasukkan"
+            }), 200
         
         cursor.close()
         conn.close()
