@@ -1392,7 +1392,7 @@ def admin_get_chat_plural(chat_id):
 def upload_file_github():
     global qa_chain
     try:
-        # Ambil data user
+        # 1. Ambil data user
         user_id = get_jwt_identity()
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -1404,7 +1404,7 @@ def upload_file_github():
             conn.close()
             return jsonify({"error": "Admin access required"}), 403
 
-        # Ambil file dari request
+        # 2. Ambil file dari request
         file = request.files.get('file')
         if not file:
             return jsonify({"error": "No file uploaded"}), 400
@@ -1413,7 +1413,7 @@ def upload_file_github():
         filename = os.path.basename(secure_name)
         file_bytes = file.read()
 
-        # Tentukan tipe file
+        # 3. Tentukan tipe file
         file_type = 'unknown'
         if filename.lower().endswith('.pdf'):
             file_type = 'pdf'
@@ -1424,24 +1424,25 @@ def upload_file_github():
         elif filename.lower().endswith('.txt'):
             file_type = 'text'
 
-        # Ekstraksi konten (jika bisa)
+        # 4. Simpan sementara di /tmp
+        temp_path = f"/tmp/{filename}"
+        with open(temp_path, "wb") as temp:
+            temp.write(file_bytes)
+
+        # 5. Ekstraksi konten
         content = None
         try:
             if file_type == 'pdf':
-                with open("/tmp/temp_upload.pdf", "wb") as temp:
-                    temp.write(file_bytes)
-                content = extract_text_from_pdf("/tmp/temp_upload.pdf")
+                content = extract_text_from_pdf(temp_path)
             elif file_type == 'excel':
-                with open("/tmp/temp_upload.xlsx", "wb") as temp:
-                    temp.write(file_bytes)
-                excel_data = extract_data_from_excel("/tmp/temp_upload.xlsx")
+                excel_data = extract_data_from_excel(temp_path)
                 content = json.dumps(excel_data, ensure_ascii=False, default=str)
             elif file_type in ['csv', 'text']:
                 content = file_bytes.decode('utf-8')
         except Exception as e:
             content = f"Error extracting content: {str(e)}"
 
-        # Upload ke GitHub
+        # 6. Upload ke GitHub
         token = os.getenv("GITHUB_TOKEN")
         repo = os.getenv("GITHUB_REPO")
         github_path = os.getenv("GITHUB_UPLOAD_PATH", "uploads/")
@@ -1461,7 +1462,7 @@ def upload_file_github():
         if response.status_code not in [200, 201]:
             return jsonify({"error": f"GitHub upload failed: {response.text}"}), 500
 
-        # Simpan metadata ke database
+        # 7. Simpan metadata ke database
         try:
             cursor.execute("DESCRIBE knowledge_files")
             columns = cursor.fetchall()
@@ -1482,15 +1483,63 @@ def upload_file_github():
         except Exception as db_err:
             return jsonify({"error": f"DB Error: {str(db_err)}"}), 500
 
-        # Optional: update FAISS jika ingin langsung reindex dari GitHub
-        # Tapi hanya mungkin jika file disimpan lokal sementara
+        # 8. Update FAISS dari dokumen yang baru
+        try:
+            print("Updating FAISS index...")
+            new_documents = []
+            if file_type == 'pdf':
+                text_chunks = text_splitter.split_text(content)
+                new_documents = [
+                    Document(page_content=chunk, metadata={"source": filename, "chunk": i, "type": "pdf"})
+                    for i, chunk in enumerate(text_chunks)
+                ]
+            elif file_type == 'excel':
+                new_documents = extract_data_from_excel(temp_path)
+            elif file_type in ['csv', 'text']:
+                text_chunks = text_splitter.split_text(content)
+                new_documents = [
+                    Document(page_content=chunk, metadata={"source": filename, "chunk": i, "type": file_type})
+                    for i, chunk in enumerate(text_chunks)
+                ]
 
+            if new_documents:
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                vector_store = FAISS.load_local(VECTOR_STORE_DIR, embeddings)
+                vector_store.add_documents(new_documents)
+                vector_store.save_local(VECTOR_STORE_DIR)
+
+                retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+
+                PROMPT = PromptTemplate(
+                    template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+
+{context}
+
+Pertanyaan: {question}
+
+Jawaban yang akurat dan relevan:""",
+                    input_variables=["context", "question"],
+                )
+
+                llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
+
+                qa_chain = RetrievalQA.from_chain_type(
+                    llm=llm,
+                    chain_type="stuff",
+                    retriever=retriever,
+                    return_source_documents=True,
+                    chain_type_kwargs={"prompt": PROMPT}
+                )
+        except Exception as indexing_err:
+            print(f"FAISS indexing error: {str(indexing_err)}")
+
+        # 9. Selesai
         cursor.close()
         conn.close()
 
         return jsonify({
             "success": True,
-            "message": "File uploaded to GitHub and saved in DB.",
+            "message": "File uploaded to GitHub, saved in DB, and FAISS updated.",
             "file": {
                 "name": filename,
                 "type": file_type
