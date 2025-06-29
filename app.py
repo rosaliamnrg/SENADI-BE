@@ -1413,7 +1413,7 @@ def upload_file_github():
             return jsonify({"error": "Admin access required"}), 403
 
         # 2. Ambil file dari request
-        file = request.files.get('file')
+        file = request.files.get('files')
         if not file:
             return jsonify({"error": "No file uploaded"}), 400
 
