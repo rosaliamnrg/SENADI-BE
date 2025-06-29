@@ -1475,19 +1475,22 @@ def upload_file_github():
         try:
             cursor.execute("DESCRIBE knowledge_files")
             columns = cursor.fetchall()
-            column_names = [col['Field'] for col in columns]
+            # column_names = [col['Field'] for col in columns]
 
-            if 'content' in column_names:
-                cursor.execute(
-                    "INSERT INTO knowledge_files (filename, file_type, content, uploaded_by) VALUES (%s, %s, %s, %s)",
-                    (filename, file_type, content, user_id)
-                )
-            else:
-                cursor.execute(
-                    "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
-                    (filename, file_type, user_id)
-                )
-
+            # if 'content' in column_names:
+            #     cursor.execute(
+            #         "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
+            #         (filename, file_type, user_id,)
+            #     )
+            # else:
+            #     cursor.execute(
+            #         "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
+            #         (filename, file_type, user_id,)
+            #     )
+            cursor.execute(
+                "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
+                (filename, file_type, user_id,)
+            )
             conn.commit()
         except Exception as db_err:
             return jsonify({"error": f"DB Error: {str(db_err)}"}), 500
