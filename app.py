@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 import pandas as pd
 import random
 import pypdf
+import base64
+import requests
 
 # LangChain imports
 from langchain.chains import RetrievalQA
@@ -1385,6 +1387,121 @@ def admin_get_chat_plural(chat_id):
     """Alias for admin_get_chat to handle the plural form of the URL"""
     return admin_get_chat(chat_id)
 
+@app.route('/upload_github', methods=['POST'])
+@jwt_required()
+def upload_file_github():
+    global qa_chain
+    try:
+        # Ambil data user
+        user_id = get_jwt_identity()
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required"}), 403
+
+        # Ambil file dari request
+        file = request.files.get('file')
+        if not file:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        secure_name = secure_filename(file.filename)
+        filename = os.path.basename(secure_name)
+        file_bytes = file.read()
+
+        # Tentukan tipe file
+        file_type = 'unknown'
+        if filename.lower().endswith('.pdf'):
+            file_type = 'pdf'
+        elif filename.lower().endswith(('.xlsx', '.xls')):
+            file_type = 'excel'
+        elif filename.lower().endswith('.csv'):
+            file_type = 'csv'
+        elif filename.lower().endswith('.txt'):
+            file_type = 'text'
+
+        # Ekstraksi konten (jika bisa)
+        content = None
+        try:
+            if file_type == 'pdf':
+                with open("/tmp/temp_upload.pdf", "wb") as temp:
+                    temp.write(file_bytes)
+                content = extract_text_from_pdf("/tmp/temp_upload.pdf")
+            elif file_type == 'excel':
+                with open("/tmp/temp_upload.xlsx", "wb") as temp:
+                    temp.write(file_bytes)
+                excel_data = extract_data_from_excel("/tmp/temp_upload.xlsx")
+                content = json.dumps(excel_data, ensure_ascii=False, default=str)
+            elif file_type in ['csv', 'text']:
+                content = file_bytes.decode('utf-8')
+        except Exception as e:
+            content = f"Error extracting content: {str(e)}"
+
+        # Upload ke GitHub
+        token = os.getenv("GITHUB_TOKEN")
+        repo = os.getenv("GITHUB_REPO")
+        github_path = os.getenv("GITHUB_UPLOAD_PATH", "uploads/")
+        api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
+
+        encoded_content = base64.b64encode(file_bytes).decode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json"
+        }
+        data = {
+            "message": f"Upload {filename}",
+            "content": encoded_content
+        }
+
+        response = requests.put(api_url, headers=headers, json=data)
+        if response.status_code not in [200, 201]:
+            return jsonify({"error": f"GitHub upload failed: {response.text}"}), 500
+
+        # Simpan metadata ke database
+        try:
+            cursor.execute("DESCRIBE knowledge_files")
+            columns = cursor.fetchall()
+            column_names = [col['Field'] for col in columns]
+
+            if 'content' in column_names:
+                cursor.execute(
+                    "INSERT INTO knowledge_files (filename, file_type, content, uploaded_by) VALUES (%s, %s, %s, %s)",
+                    (filename, file_type, content, user_id)
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
+                    (filename, file_type, user_id)
+                )
+
+            conn.commit()
+        except Exception as db_err:
+            return jsonify({"error": f"DB Error: {str(db_err)}"}), 500
+
+        # Optional: update FAISS jika ingin langsung reindex dari GitHub
+        # Tapi hanya mungkin jika file disimpan lokal sementara
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "message": "File uploaded to GitHub and saved in DB.",
+            "file": {
+                "name": filename,
+                "type": file_type
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"Upload error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/upload', methods=['POST'])
 @jwt_required()
 def upload_file():
@@ -1398,7 +1515,7 @@ def upload_file():
 
         cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
-
+        
         if not user or user.get('role') != 'admin':
             cursor.close()
             conn.close()
