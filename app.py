@@ -1317,6 +1317,125 @@ def admin_delete_file(filename):
         print(e)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/admin/delete_github/<filename>', methods=['GET'])
+@jwt_required()
+def admin_delete_file_github(filename):
+    global qa_chain
+    try:
+        current_user = get_jwt_identity()
+
+        # Check admin access
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT role FROM users WHERE id = %s", (current_user,))
+        user = cursor.fetchone()
+
+        if not user or user.get('role') != 'admin':
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Admin access required"}), 403
+
+        # 1. Hapus dari database
+        cursor.execute("DELETE FROM knowledge_files WHERE filename = %s", (filename,))
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "File not found in database"}), 404
+
+        # 2. Hapus dari local storage
+        uploads_dir = os.getenv('UPLOADS_DIR', 'uploads')
+        file_path = os.path.join(uploads_dir, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"File {filename} deleted from local storage.")
+        else:
+            print(f"File {filename} not found in local storage.")
+
+        # 3. Hapus dari GitHub
+        token = os.getenv("GITHUB_TOKEN")
+        repo = os.getenv("GITHUB_REPO")
+        github_path = os.getenv("GITHUB_UPLOAD_PATH", "uploads/")
+        github_api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json"
+        }
+
+        # Get SHA from GitHub
+        get_response = requests.get(github_api_url, headers=headers)
+        if get_response.status_code == 200:
+            sha = get_response.json().get("sha")
+            delete_response = requests.delete(github_api_url, headers=headers, json={
+                "message": f"Delete {filename}",
+                "sha": sha,
+                "branch": "uploads"
+            })
+            if delete_response.status_code in [200, 204]:
+                print(f"File {filename} deleted from GitHub.")
+            else:
+                print(f"Failed to delete from GitHub: {delete_response.text}")
+        else:
+            print(f"GitHub file not found or error: {get_response.text}")
+
+        # 4. Hapus FAISS index lama
+        VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store')
+        faiss_index_file = os.path.join(VECTOR_STORE_DIR, 'index.faiss')
+        if os.path.exists(faiss_index_file):
+            os.remove(faiss_index_file)
+            print(f"FAISS index file '{faiss_index_file}' deleted.")
+        else:
+            print("FAISS index file not found.")
+
+        # 5. Regenerate FAISS from remaining documents
+        documents = process_documents_from_uploads(deleted_filename=filename)
+        if documents:
+            embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/text-embedding-004",
+                google_api_key=GOOGLE_API_KEY
+            )
+            vector_store = FAISS.from_documents(documents, embeddings)
+            vector_store.save_local(VECTOR_STORE_DIR)
+            print("Vector store updated and saved.")
+
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            PROMPT = PromptTemplate(
+                template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+
+                {context}
+
+                Pertanyaan: {question}
+
+                Jawaban yang akurat dan relevan:""",
+                input_variables=["context", "question"],
+            )
+            llm = ChatGoogleGenerativeAI(
+                model=MODEL_NAME,
+                google_api_key=GOOGLE_API_KEY,
+                temperature=0.2
+            )
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": PROMPT}
+            )
+        else:
+            print("No documents left after deletion. FAISS not regenerated.")
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        print(e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/admin/chat/<chat_id>', methods=['GET'])
 @jwt_required()
 def admin_get_chat(chat_id):
