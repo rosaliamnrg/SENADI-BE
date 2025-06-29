@@ -1317,7 +1317,7 @@ def admin_delete_file(filename):
         print(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/admin/delete_github/<filename>', methods=['GET'])
+@app.route('/admin/delete_github/<path:filename>', methods=['GET'])
 @jwt_required()
 def admin_delete_file_github(filename):
     global qa_chain
