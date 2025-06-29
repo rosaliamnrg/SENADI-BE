@@ -2314,6 +2314,15 @@ def frontend_issue_tracker():
 #     response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
 #     response.headers.add('Access-Control-Allow-Credentials', 'true')
 #     return response
+
+@app.after_request
+def after_request(response):
+    """Tambahkan header CORS ke setiap respons"""
+    response.headers["Access-Control-Allow-Origin"] = "https://senadi.vercel.app"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
     
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
