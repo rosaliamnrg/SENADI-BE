@@ -1,11 +1,9 @@
 # backend/app.py
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required, decode_token
-from urlib.parse import quote
 from flask_cors import CORS
 import mysql.connector
 import os
-import uuid
 import traceback
 import google.generativeai as genai
 import json
@@ -1652,7 +1650,6 @@ def upload_file_github():
         token = os.getenv("GITHUB_TOKEN")
         repo = os.getenv("GITHUB_REPO")
         github_path = os.getenv("GITHUB_FOLDER_PATH")
-        encoded_filename = quote(filename)
         api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
 
         encoded_content = base64.b64encode(file_bytes).decode("utf-8")
