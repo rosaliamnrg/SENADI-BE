@@ -1485,12 +1485,12 @@ def admin_delete_file_github(filename):
         vector_store_initialized = initialize_vector_store()
         # Rebuild vector store tanpa dokumen yang dihapus
         if vector_store_initialized:
-            vector_store.add_documents(new_documents)
+            vector_store.add_documents(documents)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print(f"Vector store updated and saved without {filename}")
         else:
             return
-            
+
         # Update retriever dan chain
         retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
         PROMPT = PromptTemplate(
