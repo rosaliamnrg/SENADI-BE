@@ -1435,7 +1435,6 @@ def admin_delete_file_github(filename):
             delete_response = requests.delete(github_api_url, headers=headers, json={
                 "message": f"Delete {filename}",
                 "sha": sha,
-                "branch": "uploads"
             })
             if delete_response.status_code in [200, 204]:
                 print(f"File {filename} deleted from GitHub.")
@@ -1456,7 +1455,6 @@ def admin_delete_file_github(filename):
             delete_index_response = requests.delete(github_faiss_api_url, headers=headers, json={
                 "message": "Delete FAISS index",
                 "sha": sha,
-                "branch": "uploads"
             })
             if delete_index_response.status_code in [200, 204]:
                 print("FAISS index file deleted from GitHub.")
