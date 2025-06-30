@@ -376,7 +376,8 @@ def initialize_vector_store():
         # If vector store couldn't be loaded or doesn't exist, create a new one
         if vector_store is None:
             print("Creating new vector store...")
-            documents = process_documents_from_uploads()
+            # documents = process_documents_from_uploads()
+            documents = process_documents_from_uploads_github()
             
             if not documents:
                 print("No documents found to process")
