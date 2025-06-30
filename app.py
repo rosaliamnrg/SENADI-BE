@@ -138,7 +138,7 @@ def extract_text_from_pdf(pdf_path, max_pages=None):
 def extract_data_from_excel(excel_path):
     """Extract data from Excel file, handling multiple formats and sheets"""
     try:
-        print(f"Processing Excel file: {excel_path}")
+        # print(f"Processing Excel file: {excel_path}")
         # Read all sheets
         excel_data = pd.read_excel(excel_path, sheet_name=None)
         
@@ -1481,40 +1481,40 @@ def admin_delete_file_github(filename):
             else:
                 print(f"File not found: {path}")
             
-        documents = process_documents_from_uploads_github()
-        vector_store_initialized = initialize_vector_store()
-        # Rebuild vector store tanpa dokumen yang dihapus
-        if vector_store_initialized:
-            vector_store.add_documents(documents)
-            vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
-            print(f"Vector store updated and saved without {filename}")
-        else:
-            return
+        # documents = process_documents_from_uploads_github()
+        # vector_store_initialized = initialize_vector_store()
+        # # Rebuild vector store tanpa dokumen yang dihapus
+        # if vector_store_initialized:
+        #     vector_store.add_documents(documents)
+        #     vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+        #     print(f"Vector store updated and saved without {filename}")
+        # else:
+        #     return
 
         # Update retriever dan chain
-        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
-        PROMPT = PromptTemplate(
-            template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+        # retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+        # PROMPT = PromptTemplate(
+        #     template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
 
-            {context}
+        #     {context}
 
-            Pertanyaan: {question}
+        #     Pertanyaan: {question}
 
-            Jawaban yang akurat dan relevan:""",
-            input_variables=["context", "question"],
-        )
-        llm = ChatGoogleGenerativeAI(
-            model=MODEL_NAME,
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.2
-        )
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True,
-            chain_type_kwargs={"prompt": PROMPT}
-        )
+        #     Jawaban yang akurat dan relevan:""",
+        #     input_variables=["context", "question"],
+        # )
+        # llm = ChatGoogleGenerativeAI(
+        #     model=MODEL_NAME,
+        #     google_api_key=GOOGLE_API_KEY,
+        #     temperature=0.2
+        # )
+        # qa_chain = RetrievalQA.from_chain_type(
+        #     llm=llm,
+        #     chain_type="stuff",
+        #     retriever=retriever,
+        #     return_source_documents=True,
+        #     chain_type_kwargs={"prompt": PROMPT}
+        # )
 
         cursor.close()
         conn.close()
