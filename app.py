@@ -1465,6 +1465,12 @@ def admin_delete_file_github(filename):
             print(f"FAISS index not found on GitHub: {get_index_response.text}")
 
         # 5. Regenerate FAISS from remaining documents
+        local_faiss_index = os.path.join(faiss_path, "index.faiss")
+        local_faiss_pkl = os.path.join(faiss_path, "index.pkl")
+        for path in [local_faiss_index, local_faiss_pkl]:
+            if os.path.exists(path):
+                os.remove(path)
+                print(f"Deleted local FAISS file: {path}")
         documents = process_documents_from_uploads_github(deleted_filename=filename)
         if documents:
             embeddings = GoogleGenerativeAIEmbeddings(
