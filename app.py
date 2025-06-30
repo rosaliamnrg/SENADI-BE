@@ -355,6 +355,30 @@ def process_documents_from_uploads_github(deleted_filename = None):
         return documents
 
 
+def download_faiss_index_from_github():
+    # Download index.faiss and index.pkl from GitHub and save to local folder
+    token = os.getenv("GITHUB_TOKEN")
+    repo = os.getenv("GITHUB_REPO")
+    github_path = os.getenv("GITHUB_FAISS_PATH")  # e.g. "faiss/"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json"
+    }
+    
+    for filename in ["index.faiss", "index.pkl"]:
+        url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
+        res = requests.get(url, headers=headers)
+        if res.status_code == 200:
+            content = base64.b64decode(res.json()["content"])
+            local_path = os.path.join(VECTOR_STORE_FOLDER_PATH, filename)
+            with open(local_path, "wb") as f:
+                f.write(content)
+            print(f"Downloaded {filename} from GitHub")
+        else:
+            print(f"Failed to download {filename} from GitHub: {res.text}")
+            return False
+    return True
+
 def initialize_vector_store():
     """Initialize or load the vector store with documents from uploads"""
     global vector_store, qa_chain
@@ -1443,26 +1467,6 @@ def admin_delete_file_github(filename):
                 print(f"Failed to delete from GitHub: {delete_response.text}")
         else:
             print(f"GitHub file not found or error: {get_response.text}")
-
-        # 3. Hapus FAISS index lama dari GitHub
-        faiss_path = os.getenv("VECTOR_STORE_FOLDER_PATH")
-        github_faiss_path = f"{faiss_path}index.faiss"
-        github_faiss_api_url = f"https://api.github.com/repos/{repo}/contents/{github_faiss_path}"
-
-        # Get SHA for index.faiss
-        get_index_response = requests.get(github_faiss_api_url, headers=headers)
-        if get_index_response.status_code == 200:
-            sha = get_index_response.json().get("sha")
-            delete_index_response = requests.delete(github_faiss_api_url, headers=headers, json={
-                "message": "Delete FAISS index",
-                "sha": sha,
-            })
-            if delete_index_response.status_code in [200, 204]:
-                print("FAISS index file deleted from GitHub.")
-            else:
-                print(f"Failed to delete FAISS from GitHub: {delete_index_response.text}")
-        else:
-            print(f"FAISS index not found on GitHub: {get_index_response.text}")
 
         # 5. Regenerate FAISS from remaining documents
         local_faiss_index = os.path.join(faiss_path, "index.faiss")
