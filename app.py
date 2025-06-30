@@ -1418,11 +1418,11 @@ def admin_delete_file(filename):
 @app.route('/admin/delete_github/<path:filename>', methods=['GET'])
 @jwt_required()
 def admin_delete_file_github(filename):
-    global qa_chain
+    global vector_store, qa_chain
     try:
         current_user = get_jwt_identity()
 
-        # Check admin access
+        # 1. Cek admin
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT role FROM users WHERE id = %s", (current_user,))
@@ -1433,27 +1433,24 @@ def admin_delete_file_github(filename):
             conn.close()
             return jsonify({"error": "Admin access required"}), 403
 
-        # 1. Hapus dari database
+        # 2. Hapus dari DB
         cursor.execute("DELETE FROM knowledge_files WHERE filename = %s", (filename,))
         conn.commit()
-
         if cursor.rowcount == 0:
             cursor.close()
             conn.close()
             return jsonify({"error": "File not found in database"}), 404
 
-        # 2. Hapus dari GitHub
+        # 3. Hapus dari GitHub
         token = os.getenv("GITHUB_TOKEN")
         repo = os.getenv("GITHUB_REPO")
         github_path = os.getenv("GITHUB_FOLDER_PATH")
         github_api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
-
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json"
         }
 
-        # Get SHA from GitHub
         get_response = requests.get(github_api_url, headers=headers)
         if get_response.status_code == 200:
             sha = get_response.json().get("sha")
@@ -1461,55 +1458,50 @@ def admin_delete_file_github(filename):
                 "message": f"Delete {filename}",
                 "sha": sha,
             })
-            if delete_response.status_code in [200, 204]:
-                print(f"File {filename} deleted from GitHub.")
-            else:
-                print(f"Failed to delete from GitHub: {delete_response.text}")
+            if delete_response.status_code not in [200, 204]:
+                print(f"GitHub deletion failed: {delete_response.text}")
         else:
-            print(f"GitHub file not found or error: {get_response.text}")
+            print(f"GitHub file not found: {get_response.text}")
 
-        # 5. Regenerate FAISS from remaining documents
-        local_faiss_index = os.path.join(faiss_path, "index.faiss")
-        local_faiss_pkl = os.path.join(faiss_path, "index.pkl")
-        for path in [local_faiss_index, local_faiss_pkl]:
-            if os.path.exists(path):
-                os.remove(path)
-                print(f"Deleted local FAISS file: {path}")
-        documents = process_documents_from_uploads_github(deleted_filename=filename)
-        if documents:
-            embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/text-embedding-004",
-                google_api_key=GOOGLE_API_KEY
-            )
-            vector_store = FAISS.from_documents(documents, embeddings)
-            vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
-            print("Vector store updated and saved.")
+        # 4. Hapus dokumen terkait dari vector store
+        if vector_store is None:
+            return jsonify({"error": "Vector store not initialized"}), 500
 
-            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
-            PROMPT = PromptTemplate(
-                template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+        print(f"Filtering out documents with source: {filename}")
+        # Simpan dokumen selain yang dihapus
+        all_docs = vector_store.docstore._dict.values()
+        remaining_docs = [doc for doc in all_docs if doc.metadata.get("source") != filename]
 
-                {context}
+        # Rebuild vector store tanpa dokumen yang dihapus
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+        vector_store = FAISS.from_documents(remaining_docs, embeddings)
+        vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+        print(f"Vector store updated and saved without {filename}")
 
-                Pertanyaan: {question}
+        # Update retriever dan chain
+        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+        PROMPT = PromptTemplate(
+            template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
 
-                Jawaban yang akurat dan relevan:""",
-                input_variables=["context", "question"],
-            )
-            llm = ChatGoogleGenerativeAI(
-                model=MODEL_NAME,
-                google_api_key=GOOGLE_API_KEY,
-                temperature=0.2
-            )
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type="stuff",
-                retriever=retriever,
-                return_source_documents=True,
-                chain_type_kwargs={"prompt": PROMPT}
-            )
-        else:
-            print("No documents left after deletion. FAISS not regenerated.")
+            {context}
+
+            Pertanyaan: {question}
+
+            Jawaban yang akurat dan relevan:""",
+            input_variables=["context", "question"],
+        )
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=GOOGLE_API_KEY,
+            temperature=0.2
+        )
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",
+            retriever=retriever,
+            return_source_documents=True,
+            chain_type_kwargs={"prompt": PROMPT}
+        )
 
         cursor.close()
         conn.close()
@@ -1602,7 +1594,7 @@ def admin_get_chat_plural(chat_id):
 @app.route('/upload_github', methods=['POST'])
 @jwt_required()
 def upload_file_github():
-    global qa_chain
+    global qa_chain, vector_store
     try:
         # 1. Ambil data user
         user_id = get_jwt_identity()
@@ -1720,9 +1712,13 @@ def upload_file_github():
 
             if new_documents:
                 embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
-                vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings)
-                vector_store.add_documents(new_documents)
-                vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+                if vector_store: 
+                    vector_store.add_documents(new_documents)
+                    vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+
+                # vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings)
+                # vector_store.add_documents(new_documents)
+                # vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
 
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
 
