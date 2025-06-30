@@ -1483,6 +1483,8 @@ def admin_delete_file_github(filename):
             
         # documents = process_documents_from_uploads_github()
         vector_store_initialized = initialize_vector_store()
+        if(not vector_store_initialized):
+            return
         # # Rebuild vector store tanpa dokumen yang dihapus
         # if vector_store_initialized:
         #     vector_store.add_documents(documents)
