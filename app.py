@@ -1,6 +1,7 @@
 # backend/app.py
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required, decode_token
+from urlib.parse import quote
 from flask_cors import CORS
 import mysql.connector
 import os
@@ -281,6 +282,80 @@ def process_documents_from_uploads(deleted_filename = None):
         print(f"Error processing documents: {str(e)}")
         print(traceback.format_exc())
         return [Document(page_content=basic_info, metadata={"source": "basic_info", "type": "overview"})]
+
+def process_documents_from_uploads_github(deleted_filename = None):
+    """Process all documents in the uploads directory and convert to Document objects"""
+    documents = []
+    token = os.getenv("GITHUB_TOKEN")
+    repo = os.getenv("GITHUB_REPO")
+    github_path = os.getenv("GITHUB_FOLDER_PATH")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json"
+    }
+    
+    basic_info = """
+    Survei Sosial Ekonomi Nasional (Susenas) adalah sistem survei yang digunakan BPS untuk mengumpulkan data sosial-ekonomi penduduk Indonesia. 
+    Susenas pertama kali dilakukan pada tahun 1963. Susenas mengumpulkan data konsumsi/pengeluaran rumah tangga, pendidikan, kesehatan, fertilitas, 
+    perumahan, dan kondisi sosial-ekonomi lainnya. Data Susenas digunakan untuk berbagai perencanaan, monitoring, dan evaluasi kebijakan pemerintah.
+    
+    Survei Sosial Ekonomi Nasional (Susenas) adalah sebuah kegiatan survei yang dilaksanakan oleh Badan Pusat Statistik (BPS) Indonesia. 
+    Survei ini bertujuan untuk mengumpulkan data sosial ekonomi penduduk Indonesia, yang mencakup bidang demografi, kesehatan, pendidikan, 
+    perumahan, serta konsumsi dan pengeluaran rumah tangga. Susenas merupakan sumber data utama untuk menghitung berbagai indikator kesejahteraan 
+    rakyat di Indonesia.
+    
+    Bot Susenas adalah asisten virtual yang dirancang untuk membantu menjawab pertanyaan seputar Survei Sosial Ekonomi Nasional (Susenas). 
+    Bot ini dapat memberikan informasi tentang konsep, definisi, metodologi, dan hasil-hasil Susenas, serta membantu pengguna dalam mengakses 
+    dan memahami data Susenas untuk berbagai keperluan analisis dan penelitian.
+    """
+    
+    # Add basic info as a document
+    documents.append(Document(
+        page_content=basic_info,
+        metadata={"source": "basic_info", "type": "overview"}
+    ))
+    
+    # Process each file in the uploads directory
+    try:
+        url = f"https://api.github.com/repos/{repo}/contents/{github_path}"
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            print(f"Failed to fetch list: {response.text}")
+            return documents
+        
+        for file_info in response.json():
+            name = file_info["name"]
+            if name == deleted_filename or not name.lower().endswith(('.xlsx', '.pdf', '.txt', '.md', '.csv')):
+                continue
+
+            file_url = file_info.get("download_url")
+            file_content = requests.get(file_url)
+            if file_content.status_code != 200:
+                print(f"Error fetching {name}")
+                continue
+
+            print(f"Processing {name}")
+            if name.lower().endswith(('.xlsx', '.xls')):
+                docs = extract_data_from_excel(file_content.content)
+                documents.extend(docs)
+            elif name.lower().endswith('.pdf'):
+                text = extract_text_from_pdf(file_content.content)
+                chunks = text_splitter.split_text(text)
+                for i, chunk in enumerate(chunks):
+                    documents.append(Document(page_content=chunk, metadata={"source": name, "chunk": i}))
+            elif name.lower().endswith(('.txt', '.csv', '.md')):
+                text = file_content.text
+                chunks = text_splitter.split_text(text)
+                for i, chunk in enumerate(chunks):
+                    documents.append(Document(page_content=chunk, metadata={"source": name, "chunk": i}))
+
+        print(f"Processed {len(documents)} documents.")
+        return documents
+
+    except Exception as e:
+        print(traceback.format_exc())
+        return documents
+
 
 def initialize_vector_store():
     """Initialize or load the vector store with documents from uploads"""
@@ -1344,19 +1419,10 @@ def admin_delete_file_github(filename):
             conn.close()
             return jsonify({"error": "File not found in database"}), 404
 
-        # 2. Hapus dari local storage
-        uploads_dir = os.getenv('GITHUB_FOLDER_PATH')
-        file_path = os.path.join(uploads_dir, filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            print(f"File {filename} deleted from local storage.")
-        else:
-            print(f"File {filename} not found in local storage.")
-
-        # 3. Hapus dari GitHub
+        # 2. Hapus dari GitHub
         token = os.getenv("GITHUB_TOKEN")
         repo = os.getenv("GITHUB_REPO")
-        github_path = os.getenv("GITHUB_UPLOAD_PATH", "uploads/")
+        github_path = os.getenv("GITHUB_FOLDER_PATH")
         github_api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
 
         headers = {
@@ -1380,17 +1446,29 @@ def admin_delete_file_github(filename):
         else:
             print(f"GitHub file not found or error: {get_response.text}")
 
-        # 4. Hapus FAISS index lama
-        VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store/')
-        faiss_index_file = os.path.join(VECTOR_STORE_DIR, 'index.faiss')
-        if os.path.exists(faiss_index_file):
-            os.remove(faiss_index_file)
-            print(f"FAISS index file '{faiss_index_file}' deleted.")
+        # 3. Hapus FAISS index lama dari GitHub
+        faiss_path = os.getenv("VECTOR_STORE_FOLDER_PATH")
+        github_faiss_path = f"{faiss_path}index.faiss"
+        github_faiss_api_url = f"https://api.github.com/repos/{repo}/contents/{github_faiss_path}"
+
+        # Get SHA for index.faiss
+        get_index_response = requests.get(github_faiss_api_url, headers=headers)
+        if get_index_response.status_code == 200:
+            sha = get_index_response.json().get("sha")
+            delete_index_response = requests.delete(github_faiss_api_url, headers=headers, json={
+                "message": "Delete FAISS index",
+                "sha": sha,
+                "branch": "uploads"
+            })
+            if delete_index_response.status_code in [200, 204]:
+                print("FAISS index file deleted from GitHub.")
+            else:
+                print(f"Failed to delete FAISS from GitHub: {delete_index_response.text}")
         else:
-            print("FAISS index file not found.")
+            print(f"FAISS index not found on GitHub: {get_index_response.text}")
 
         # 5. Regenerate FAISS from remaining documents
-        documents = process_documents_from_uploads(deleted_filename=filename)
+        documents = process_documents_from_uploads_github(deleted_filename=filename)
         if documents:
             embeddings = GoogleGenerativeAIEmbeddings(
                 model="models/text-embedding-004",
@@ -1573,7 +1651,8 @@ def upload_file_github():
         # 6. Upload ke GitHub
         token = os.getenv("GITHUB_TOKEN")
         repo = os.getenv("GITHUB_REPO")
-        github_path = os.getenv("GITHUB_UPLOAD_PATH", "uploads/")
+        github_path = os.getenv("GITHUB_FOLDER_PATH")
+        encoded_filename = quote(filename)
         api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
 
         encoded_content = base64.b64encode(file_bytes).decode("utf-8")
@@ -1584,7 +1663,6 @@ def upload_file_github():
         data = {
             "message": f"Upload {filename}",
             "content": encoded_content,
-            "branch": "uploads"
         }
 
         response = requests.put(api_url, headers=headers, json=data)
