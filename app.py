@@ -1482,7 +1482,7 @@ def admin_delete_file_github(filename):
                 print(f"File not found: {path}")
             
         # documents = process_documents_from_uploads_github()
-        # vector_store_initialized = initialize_vector_store()
+        vector_store_initialized = initialize_vector_store()
         # # Rebuild vector store tanpa dokumen yang dihapus
         # if vector_store_initialized:
         #     vector_store.add_documents(documents)
