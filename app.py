@@ -40,7 +40,7 @@ print(f"Python version: {sys.version}")
 # Set up Google API key for Gemini
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 GEMINI_AVAILABLE = False
-MODEL_NAME = 'gemini-1.5-flash'  # Default model name
+MODEL_NAME = 'gemini-2.0-flash-lite'  # Default model name
 
 if GOOGLE_API_KEY:
     try:
@@ -653,7 +653,7 @@ def register():
         print("Registering: ", username, email, hash_password)
         cursor.execute(
             "INSERT INTO users (username, email, password, role) VALUES (%s, %s, %s, %s)",
-            (username, email, hash_password, 'user',)
+            (username, email, hash_password, 'admin',)
         )
         conn.commit()
         user_id = cursor.lastrowid
