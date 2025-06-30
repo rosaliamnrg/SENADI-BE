@@ -76,8 +76,8 @@ UPLOADS_DIR = os.getenv('UPLOADS_DIR', 'uploads')
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Configure Vector store directory
-VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store')
-os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
+VECTOR_STORE_FOLDER_PATH = os.getenv('VECTOR_STORE_FOLDER_PATH')
+os.makedirs(VECTOR_STORE_FOLDER_PATH, exist_ok=True)
 
 # Initialize Flask app
 print("Flask app loaded")
@@ -361,12 +361,12 @@ def initialize_vector_store():
     
     try:
         # Try to load existing vector store
-        if os.path.exists(os.path.join(VECTOR_STORE_DIR, "index.faiss")):
+        if os.path.exists(os.path.join(VECTOR_STORE_FOLDER_PATH, "index.faiss")):
             print("Loading existing FAISS index...")
             try:
                 # Use GoogleGenerativeAIEmbeddings as default - more reliable
                 embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
-                vector_store = FAISS.load_local(VECTOR_STORE_DIR, embeddings, allow_dangerous_deserialization=True)
+                vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings, allow_dangerous_deserialization=True)
                 print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
             except Exception as load_error:
                 print(f"Error loading FAISS index: {str(load_error)}")
@@ -391,8 +391,8 @@ def initialize_vector_store():
                 print("Created FAISS index with GoogleGenerativeAIEmbeddings")
                 
                 # Save the index
-                vector_store.save_local(VECTOR_STORE_DIR)
-                print(f"Saved FAISS index to {VECTOR_STORE_DIR}")
+                vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+                print(f"Saved FAISS index to {VECTOR_STORE_FOLDER_PATH}")
             except Exception as embed_error:
                 print(f"Error creating embeddings: {str(embed_error)}")
                 traceback.print_exc()
@@ -1320,7 +1320,7 @@ def admin_delete_file(filename):
             conn.close()
             return jsonify({"error": "File not found"}), 404
 
-        uploads_dir = os.getenv('UPLOADS_DIR', 'uploads')
+        uploads_dir = os.getenv('GITHUB_UPLOADS_PATH', 'uploads')
         file_path = os.path.join(uploads_dir, filename)
         if os.path.exists(file_path):
             os.remove(file_path)  # Delete the file from local storage
@@ -1330,10 +1330,10 @@ def admin_delete_file(filename):
 
         # Proses dokumen dan simpan FAISS index ulang
         # Tentukan direktori tempat FAISS index disimpan
-        VECTOR_STORE_DIR = os.getenv('VECTOR_STORE_DIR', 'vector_store')
+        VECTOR_STORE_FOLDER_PATH = os.getenv('VECTOR_STORE_FOLDER_PATH', 'vector_store')
 
         # Tentukan nama file FAISS index yang ingin dihapus (index.faiss)
-        faiss_index_file = os.path.join(VECTOR_STORE_DIR, 'index.faiss')
+        faiss_index_file = os.path.join(VECTOR_STORE_FOLDER_PATH, 'index.faiss')
 
         # Periksa apakah file FAISS ada, lalu hapus
         if os.path.exists(faiss_index_file):
@@ -1347,7 +1347,7 @@ def admin_delete_file(filename):
         if documents:
             embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
-            vector_store.save_local(VECTOR_STORE_DIR)
+            vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
             
             # Perbarui QA chain agar pencarian bisa pakai vector store baru
@@ -1473,7 +1473,7 @@ def admin_delete_file_github(filename):
                 google_api_key=GOOGLE_API_KEY
             )
             vector_store = FAISS.from_documents(documents, embeddings)
-            vector_store.save_local(VECTOR_STORE_DIR)
+            vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved.")
 
             retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
@@ -1711,9 +1711,9 @@ def upload_file_github():
 
             if new_documents:
                 embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
-                vector_store = FAISS.load_local(VECTOR_STORE_DIR, embeddings)
+                vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings)
                 vector_store.add_documents(new_documents)
-                vector_store.save_local(VECTOR_STORE_DIR)
+                vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
 
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
 
@@ -1846,7 +1846,7 @@ def upload_file():
         if documents:
             embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
-            vector_store.save_local(VECTOR_STORE_DIR)
+            vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
             
             # Perbarui QA chain agar pencarian bisa pakai vector store baru
@@ -2498,8 +2498,8 @@ def rebuild_knowledge():
         
         # First try to delete the existing vector store files
         try:
-            for file in os.listdir(VECTOR_STORE_DIR):
-                file_path = os.path.join(VECTOR_STORE_DIR, file)
+            for file in os.listdir(VECTOR_STORE_FOLDER_PATH):
+                file_path = os.path.join(VECTOR_STORE_FOLDER_PATH, file)
                 if os.path.isfile(file_path):
                     os.remove(file_path)
                     print(f"Deleted {file_path}")
