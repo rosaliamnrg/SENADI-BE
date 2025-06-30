@@ -1468,16 +1468,29 @@ def admin_delete_file_github(filename):
             return jsonify({"error": "Vector store not initialized"}), 500
 
         print(f"Filtering out documents with source: {filename}")
-        # Simpan dokumen selain yang dihapus
-        all_docs = vector_store.docstore._dict.values()
-        remaining_docs = [doc for doc in all_docs if doc.metadata.get("source") != filename]
 
+        # Periksa apakah file FAISS ada, lalu hapus
+        faiss_folder = os.getenv("VECTOR_STORE_FOLDER_PATH")
+        faiss_index_file = os.path.join(faiss_folder, "index.faiss")
+        faiss_pkl_file = os.path.join(faiss_folder, "index.pkl")
+
+        for path in [faiss_index_file, faiss_pkl_file]:
+            if os.path.exists(path):
+                os.remove(path)
+                print(f"Deleted FAISS file: {path}")
+            else:
+                print(f"File not found: {path}")
+            
+        documents = process_documents_from_uploads_github()
+        vector_store_initialized = initialize_vector_store()
         # Rebuild vector store tanpa dokumen yang dihapus
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
-        vector_store = FAISS.from_documents(remaining_docs, embeddings)
-        vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
-        print(f"Vector store updated and saved without {filename}")
-
+        if vector_store_initialized:
+            vector_store.add_documents(new_documents)
+            vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+            print(f"Vector store updated and saved without {filename}")
+        else:
+            return
+            
         # Update retriever dan chain
         retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
         PROMPT = PromptTemplate(
