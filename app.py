@@ -73,7 +73,7 @@ else:
     print("Warning: GOOGLE_API_KEY not set. Gemini integration will not work.")
 
 # Configure uploads directory
-UPLOADS_DIR = os.getenv('UPLOADS_DIR', 'uploads')
+UPLOADS_DIR = os.getenv('UPLOADS_FOLDER_PATH')
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Configure Vector store directory
@@ -184,7 +184,7 @@ def extract_data_from_excel(excel_path):
 
 def process_documents_from_uploads(deleted_filename = None):
     """Process all documents in the uploads directory and convert to Document objects"""
-    uploads_dir = os.getenv('UPLOADS_DIR', 'uploads')
+    uploads_dir = os.getenv('UPLOADS_FOLDER_PATH')
     documents = []
     basic_info = """
     Survei Sosial Ekonomi Nasional (Susenas) adalah sistem survei yang digunakan BPS untuk mengumpulkan data sosial-ekonomi penduduk Indonesia. 
@@ -328,9 +328,13 @@ def process_documents_from_uploads_github(deleted_filename = None):
         for file_info in response.json():
             name = file_info["name"]
             
-            if deleted_filename and name == deleted_filename:
-                print(f"Skipping deleted file: {name}")
-                continue
+            local_uploads_dir = os.getenv("UPLOADS_DIR", "uploads")
+            local_file_path = os.path.join(local_uploads_dir, name)
+            if os.path.exists(local_file_path):
+                os.remove(local_file_path)
+                print(f"Deleted local file: {local_file_path}")
+            else:
+                print(f"Local file not found: {local_file_path}")
             
             file_url = file_info.get("download_url")
             file_content = requests.get(file_url)
@@ -1853,7 +1857,7 @@ def upload_file():
             return jsonify({"error": "No file uploaded"}), 400
 
         # Simpan file di direktori uploads
-        uploads_dir = os.getenv('UPLOADS_DIR', 'uploads')
+        uploads_dir = os.getenv('UPLOADS_FOLDER_PATH')
         os.makedirs(uploads_dir, exist_ok=True)
         secure_name = secure_filename(file.filename)
         file_path = os.path.join(uploads_dir, secure_name)
