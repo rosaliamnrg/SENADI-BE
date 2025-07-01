@@ -328,7 +328,12 @@ def process_documents_from_uploads_github(deleted_filename = None):
         for file_info in response.json():
             name = file_info["name"]
             
-            local_uploads_dir = os.getenv("UPLOADS_DIR", "uploads")
+            # Skip deleted file
+            if deleted_filename and name == deleted_filename:
+                print(f"Skipping deleted file: {name}")
+                continue
+            
+            local_uploads_dir = os.getenv("UPLOADS_FOLDER_PATH")
             local_file_path = os.path.join(local_uploads_dir, name)
             if os.path.exists(local_file_path):
                 os.remove(local_file_path)
