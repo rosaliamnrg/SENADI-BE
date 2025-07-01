@@ -285,7 +285,7 @@ def process_documents_from_uploads(deleted_filename = None):
         print(traceback.format_exc())
         return [Document(page_content=basic_info, metadata={"source": "basic_info", "type": "overview"})]
 
-def process_documents_from_uploads_github():
+def process_documents_from_uploads_github(deleted_filename = None):
     """Process all documents in the uploads directory and convert to Document objects"""
     documents = []
     token = os.getenv("GITHUB_TOKEN")
@@ -327,6 +327,11 @@ def process_documents_from_uploads_github():
         
         for file_info in response.json():
             name = file_info["name"]
+            
+            if deleted_filename and name == deleted_filename:
+                print(f"Skipping deleted file: {name}")
+                continue
+            
             file_url = file_info.get("download_url")
             file_content = requests.get(file_url)
             if file_content.status_code != 200:
@@ -1482,7 +1487,7 @@ def admin_delete_file_github(filename):
             else:
                 print(f"File not found: {path}")
             
-        documents = process_documents_from_uploads_github()
+        documents = process_documents_from_uploads_github(deleted_filename = filename)
         
         if not documents:
             vector_store = None
