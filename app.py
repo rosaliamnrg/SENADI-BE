@@ -161,7 +161,7 @@ def extract_data_from_excel(excel_path):
             sheet_text = f"Sheet: {sheet_name}\n"
             
             # Handle Q&A format specifically (looking for columns like question/answer, q/a, etc)
-            question_cols = [col for col in df.columns if any(q in str(col).lower() for q in ['Jenis Kuesioner', 'Blok', 'Nomor Pertanyaan', 'Permasalahan'])]
+            question_cols = [col for col in df.columns if any(q in str(col).lower() for q in ['Permasalahan'])]
             answer_cols = [col for col in df.columns if any(a in str(col).lower() for a in ['Solusi'])]
             
             if question_cols and answer_cols:
@@ -196,18 +196,7 @@ def process_documents_from_uploads(deleted_filename = None):
     uploads_dir = os.getenv('UPLOADS_FOLDER_PATH')
     documents = []
     basic_info = """
-    Survei Sosial Ekonomi Nasional (Susenas) adalah sistem survei yang digunakan BPS untuk mengumpulkan data sosial-ekonomi penduduk Indonesia. 
-    Susenas pertama kali dilakukan pada tahun 1963. Susenas mengumpulkan data konsumsi/pengeluaran rumah tangga, pendidikan, kesehatan, fertilitas, 
-    perumahan, dan kondisi sosial-ekonomi lainnya. Data Susenas digunakan untuk berbagai perencanaan, monitoring, dan evaluasi kebijakan pemerintah.
-    
-    Survei Sosial Ekonomi Nasional (Susenas) adalah sebuah kegiatan survei yang dilaksanakan oleh Badan Pusat Statistik (BPS) Indonesia. 
-    Survei ini bertujuan untuk mengumpulkan data sosial ekonomi penduduk Indonesia, yang mencakup bidang demografi, kesehatan, pendidikan, 
-    perumahan, serta konsumsi dan pengeluaran rumah tangga. Susenas merupakan sumber data utama untuk menghitung berbagai indikator kesejahteraan 
-    rakyat di Indonesia.
-    
-    Bot Susenas adalah asisten virtual yang dirancang untuk membantu menjawab pertanyaan seputar Survei Sosial Ekonomi Nasional (Susenas). 
-    Bot ini dapat memberikan informasi tentang konsep, definisi, metodologi, dan hasil-hasil Susenas, serta membantu pengguna dalam mengakses 
-    dan memahami data Susenas untuk berbagai keperluan analisis dan penelitian.
+    Badan Pusat Statistik (BPS) merupakan lembaga pemerintah non kementerian yang bertanggung jawab langsung kepada presiden. Berdasarkan Undang-Undang Republik Indonesia No 16 Tahun 1997, salah satu peranan BPS adalah menyediakan kebutuhan data bagi pemerintah dan masyarakat. BPS mengumpulkan data dari berbagai sumber dengan cara sensus, survei, kompilasi produk administrasi, dan cara lain sesuai perkembangan ilmu pengetahuan dan teknologi. Survei Sosial Ekonomi Nasional (Susenas) merupakan sandaran utama Indonesia dalam hal kebutuhan data untuk mengimplementasikan pembangunan yang sejalan dengan Tujuan Pembangunan Berkelanjutan/Sustainable Development Goals (TPB/SDGs). Pertanyaan-pertanyaan Susenas, baik Susenas Kor maupun Susenas Modul merupakan tulang punggung indikator SDGs, RPJMN, dan kesejahteraan bangsa.
     """
     
     # Add basic info as a document
@@ -511,12 +500,10 @@ def get_greeting_response(message):
     greetings = {
         'hai': [
             'Hai! Ada yang bisa saya bantu tentang Susenas?',
-            'Halo! Senang berbicara dengan Anda. Ada yang ingin ditanyakan tentang Susenas?',
-            'Hai! Saya Bot Susenas, siap membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional.'
+            'Halo! Senang berbicara dengan Anda. Ada yang ingin ditanyakan tentang Susenas?'
         ],
         'halo': [
             'Halo! Apa kabar? Ada yang bisa saya bantu?',
-            'Halo! Saya Bot Susenas, siap menjawab pertanyaan Anda.',
             'Halo! Senang bertemu dengan Anda. Tanyakan saja apa yang ingin Anda ketahui tentang Susenas.'
         ],
         'selamat pagi': [
@@ -525,7 +512,7 @@ def get_greeting_response(message):
         ],
         'selamat siang': [
             'Selamat siang! Ada yang bisa saya bantu terkait Susenas?',
-            'Siang yang baik! Saya siap membantu Anda dengan informasi Susenas hari ini.'
+            'Siang yang cerah! Saya siap membantu Anda dengan informasi Susenas hari ini.'
         ],
         'selamat sore': [
             'Selamat sore! Ada yang bisa saya bantu terkait Susenas?',
@@ -537,7 +524,7 @@ def get_greeting_response(message):
         ],
         'apa kabar': [
             'Saya baik-baik saja, terima kasih telah bertanya! Bagaimana dengan Anda? Ada yang ingin ditanyakan tentang Susenas?',
-            'Sebagai bot, saya selalu siap membantu! Bagaimana kabar Anda? Ada yang ingin ditanyakan tentang Susenas?'
+            'Sebagai chatbot, saya selalu siap membantu! Bagaimana kabar Anda? Ada yang ingin ditanyakan tentang Susenas?'
         ],
         'assalamualaikum': [
             'Waalaikumsalam Warahmatullahi Wabarakatuh. Ada yang bisa saya bantu terkait Susenas?',
@@ -552,16 +539,16 @@ def get_greeting_response(message):
             'Dengan senang hati! Jangan ragu untuk bertanya lagi jika ada yang ingin Anda ketahui tentang Susenas.'
         ],
         'salam kenal': [
-            'Salam kenal juga! Saya Bot Susenas, asisten yang akan membantu Anda dengan informasi tentang Survei Sosial Ekonomi Nasional.',
+            'Salam kenal juga! Saya Chatbot Susenas, asisten yang akan membantu Anda dengan informasi tentang Survei Sosial Ekonomi Nasional.',
             'Salam kenal! Saya siap membantu menjawab pertanyaan Anda tentang Susenas. Apa yang ingin Anda ketahui?'
         ],
         'siapa kamu': [
-            'Saya adalah Bot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas).',
-            'Saya Bot Susenas, asisten yang akan membantu Anda memahami dan mengakses informasi tentang Survei Sosial Ekonomi Nasional yang dilakukan oleh BPS.'
+            'Saya adalah Chatbot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas).',
+            'Saya Chatbot Susenas, asisten yang akan membantu Anda memahami dan mengakses informasi tentang Survei Sosial Ekonomi Nasional yang dilakukan oleh BPS.'
         ],
         'kamu siapa': [
-            'Saya adalah Bot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas).',
-            'Saya Bot Susenas, asisten yang akan membantu Anda memahami dan mengakses informasi tentang Survei Sosial Ekonomi Nasional yang dilakukan oleh BPS.'
+            'Saya adalah Chatbot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas).',
+            'Saya Chatbot Susenas, asisten yang akan membantu Anda memahami dan mengakses informasi tentang Survei Sosial Ekonomi Nasional yang dilakukan oleh BPS.'
         ]
     }
     
@@ -587,17 +574,13 @@ def is_about_bot(message):
 def get_bot_info_response():
     """Return information about the bot itself"""
     responses = [
-        "Saya adalah Bot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas). Saya dapat menjawab pertanyaan tentang metodologi survei, konsep dan definisi, hasil-hasil survei, dan cara mengakses data Susenas.",
-        
-        "Saya Bot Susenas, dikembangkan untuk membantu pengguna memahami dan mengakses informasi tentang Susenas (Survei Sosial Ekonomi Nasional). Saya dilatih menggunakan dokumen-dokumen resmi dari BPS untuk memberikan informasi yang akurat tentang survei ini.",
-        
-        "Bot Susenas adalah asisten digital yang membantu menjawab pertanyaan tentang Survei Sosial Ekonomi Nasional. Saya dirancang untuk memberikan informasi teknis dan praktis tentang Susenas, membantu pengguna memahami metodologi, definisi, dan hasil survei."
+        "Saya adalah Chatbot Susenas, asisten virtual yang dirancang untuk membantu Anda dengan informasi seputar Survei Sosial Ekonomi Nasional (Susenas). Saya dapat menjawab pertanyaan tentang metodologi survei, konsep dan definisi, dan kasus batas yang sering terjadi saat Susenas."
     ]
     return random.choice(responses)
 
 def is_about_susenas(message):
     """Check if the message is asking about Susenas in general"""
-    susenas_indicators = ['susenas', 'survei', 'survey', 'sosial ekonomi', 'bps', 'statistik']
+    susenas_indicators = ['susenas', 'survei', 'survey', 'sosial ekonomi']
     general_question = ['apa', 'itu', 'jelaskan', 'ceritakan', 'definisi', 'maksud', 'pengertian', 'adalah']
     
     message_lower = message.lower()
@@ -609,11 +592,27 @@ def is_about_susenas(message):
 def get_susenas_info_response():
     """Return general information about Susenas"""
     responses = [
-        "Survei Sosial Ekonomi Nasional (Susenas) adalah survei skala besar yang dilakukan oleh Badan Pusat Statistik (BPS) Indonesia. Survei ini mengumpulkan data tentang kondisi sosial-ekonomi rumah tangga Indonesia, termasuk pendidikan, kesehatan, perumahan, dan pola konsumsi. Susenas dilaksanakan secara reguler sejak tahun 1963 dan menjadi sumber data utama untuk kebijakan pembangunan sosial di Indonesia.",
         
-        "Susenas atau Survei Sosial Ekonomi Nasional adalah kegiatan pengumpulan data yang dilakukan BPS untuk mengukur berbagai indikator kesejahteraan rakyat. Data yang dikumpulkan meliputi struktur pengeluaran rumah tangga, kondisi kesehatan, pendidikan, perumahan, dan karakteristik sosial-ekonomi lainnya. Hasil Susenas digunakan untuk mengukur kemiskinan, ketimpangan, dan berbagai indikator pembangunan manusia di Indonesia.",
-        
-        "Survei Sosial Ekonomi Nasional (Susenas) merupakan salah satu survei yang diselenggarakan oleh BPS secara rutin. Susenas menghasilkan data tentang kondisi sosial ekonomi masyarakat, termasuk pengeluaran konsumsi, pendidikan, kesehatan, dan perumahan. Data ini sangat penting untuk perencanaan, monitoring, dan evaluasi program pembangunan pemerintah. Sejak awal, Susenas dirancang untuk mengumpulkan data pokok yang diperlukan untuk berbagai indikator pembangunan, antara lain tingkat pendidikan, kesehatan, dan kesejahteraan penduduk."
+        "Survei Sosial Ekonomi Nasional (Susenas) merupakan salah satu sandaran utama Indonesia dalam hal kebutuhan data untuk mengimplementasikan pembangunan yang sejalan dengan Tujuan Pembangunan Berkelanjutan/Sustainable Development Goals (TPB/SDGs). Pertanyaan-pertanyaan Susenas, baik Susenas Kor maupun Susenas Modul merupakan tulang punggung indikator SDGs, RPJMN, dan kesejahteraan bangsa."
+    ]
+    return random.choice(responses)
+
+def is_about_bps(message):
+    """Check if the message is asking about Susenas in general"""
+    susenas_indicators = ['bps', 'Badan Pusat Statistik']
+    general_question = ['apa', 'itu', 'jelaskan', 'ceritakan', 'definisi', 'maksud', 'pengertian', 'adalah']
+    
+    message_lower = message.lower()
+    has_susenas_word = any(word in message_lower for word in susenas_indicators)
+    has_general_q = any(word in message_lower for word in general_question)
+    
+    return has_susenas_word and has_general_q
+
+def get_bps_info_response():
+    """Return general information about BPS"""
+    responses = [
+
+        "Badan Pusat Statistik (BPS) merupakan lembaga pemerintah non kementerian yang bertanggung jawab langsung kepada presiden. Berdasarkan Undang-Undang Republik Indonesia No 16 Tahun 1997, salah satu peranan BPS adalah menyediakan kebutuhan data bagi pemerintah dan masyarakat. BPS mengumpulkan data dari berbagai sumber dengan cara sensus, survei, kompilasi produk administrasi, dan cara lain sesuai perkembangan ilmu pengetahuan dan teknologi."
     ]
     return random.choice(responses)
 
@@ -1005,6 +1004,8 @@ def chat(chat_id):
                 bot_response = get_bot_info_response()
             elif is_about_susenas(content):
                 bot_response = get_susenas_info_response()
+            elif is_about_bps(content):
+                bot_response = get_bps_info_response()
             else:
                 # Use LangChain QA chain for more complex queries
                 try:
@@ -1411,7 +1412,20 @@ def admin_delete_file(filename):
             
             PROMPT = PromptTemplate(
                 template="""
-                Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+                Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+
+                Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+
+                Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+
+                Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+
+                Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+                **"Mohon maaf, jawaban untuk pertanyaan tersebut belum ada nih. Pertanyaan tersebut akan segera ditinjau dan dijawab oleh instruktur"**
+
+                JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+
+                Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
 
                 {context}
 
@@ -1530,7 +1544,20 @@ def admin_delete_file_github(filename):
 
             retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
             PROMPT = PromptTemplate(
-                template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+                template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+
+                Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+
+                Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+
+                Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+
+                Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+                **"Mohon maaf, jawaban untuk pertanyaan tersebut belum ada nih. Pertanyaan tersebut akan segera ditinjau dan dijawab oleh instruktur"**
+
+                JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+
+                Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
 
                 {context}
 
@@ -1810,7 +1837,20 @@ def upload_file_github():
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
 
                 PROMPT = PromptTemplate(
-                    template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+                    template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+
+                    Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+    
+                    Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+    
+                    Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+    
+                    Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+                    **"Mohon maaf, jawaban untuk pertanyaan tersebut belum ada nih. Pertanyaan tersebut akan segera ditinjau dan dijawab oleh instruktur"**
+    
+                    JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+    
+                    Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
 
                     {context}
 
@@ -1947,7 +1987,20 @@ def upload_file():
             
             PROMPT = PromptTemplate(
                 template="""
-                Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+                Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+
+                Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+
+                Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+
+                Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+
+                Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+                **"Mohon maaf, jawaban untuk pertanyaan tersebut belum ada nih. Pertanyaan tersebut akan segera ditinjau dan dijawab oleh instruktur"**
+
+                JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+
+                Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
 
                 {context}
 
