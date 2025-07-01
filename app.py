@@ -1481,10 +1481,51 @@ def admin_delete_file_github(filename):
             else:
                 print(f"File not found: {path}")
             
+        documents = process_documents_from_uploads_github()
+        
+        if not documents:
+            vector_store = None
+            qa_chain = None
+            print("No documents left after deletion.")
+        else:
+            # Bangun FAISS baru
+            embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/text-embedding-004",
+                google_api_key=GOOGLE_API_KEY
+            )
+            vector_store = FAISS.from_documents(documents, embeddings)
+            vector_store.save_local(faiss_folder)
+            print("Vector store rebuilt without deleted file.")
+
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            PROMPT = PromptTemplate(
+                template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
+
+                {context}
+
+                Pertanyaan: {question}
+
+                Jawaban yang akurat dan relevan:""",
+                input_variables=["context", "question"]
+            )
+            llm = ChatGoogleGenerativeAI(
+                model=MODEL_NAME,
+                google_api_key=GOOGLE_API_KEY,
+                temperature=0.2
+            )
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": PROMPT}
+            )    
+            
+
         # documents = process_documents_from_uploads_github()
-        vector_store_initialized = initialize_vector_store()
-        if(not vector_store_initialized):
-            return
+        # vector_store_initialized = initialize_vector_store()
+        # if(not vector_store_initialized):
+        #     return
         # # Rebuild vector store tanpa dokumen yang dihapus
         # if vector_store_initialized:
         #     vector_store.add_documents(documents)
