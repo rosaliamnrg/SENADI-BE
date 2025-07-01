@@ -14,10 +14,11 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 import pandas as pd
 import random
-import pypdf
+# import pypdf
 import base64
 import requests
 from io import BytesIO
+import pdfplumber
 
 # LangChain imports
 from langchain.chains import RetrievalQA
@@ -120,17 +121,17 @@ def get_db_connection():
     )
 
 def extract_text_from_pdf(pdf_path, max_pages=None):
-    """Extract text from a PDF file, optionally limited to max_pages"""
+    """Extract text from a PDF file using pdfplumber, optionally limited to max_pages"""
     try:
         text = ""
-        with open(pdf_path, 'rb') as file:
-            reader = pypdf.PdfReader(file)
-            pages_to_read = len(reader.pages) if max_pages is None else min(len(reader.pages), max_pages)
+        with pdfplumber.open(pdf_path) as pdf:
+            total_pages = len(pdf.pages)
+            pages_to_read = total_pages if max_pages is None else min(total_pages, max_pages)
             print(f"Extracting text from PDF: {pdf_path} - {pages_to_read} pages")
 
             for i in range(pages_to_read):
                 try:
-                    page = reader.pages[i]
+                    page = pdf.pages[i]
                     extracted = page.extract_text()
                     if extracted:
                         text += extracted + "\n\n"
