@@ -41,7 +41,7 @@ print(f"Python version: {sys.version}")
 # Set up Google API key for Gemini
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 GEMINI_AVAILABLE = False
-MODEL_NAME = 'gemini-2.0-flash-lite'  # Default model name
+MODEL_NAME = 'gemini-1.5-lite'  # Default model name
 
 if GOOGLE_API_KEY:
     try:
