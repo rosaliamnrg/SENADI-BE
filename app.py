@@ -17,6 +17,7 @@ import random
 import pypdf
 import base64
 import requests
+from io import BytesIO
 
 # LangChain imports
 from langchain.chains import RetrievalQA
@@ -140,7 +141,10 @@ def extract_data_from_excel(excel_path):
     try:
         # print(f"Processing Excel file: {excel_path}")
         # Read all sheets
-        excel_data = pd.read_excel(excel_path, sheet_name=None)
+        if isinstance(excel_path, bytes):
+            excel_data = pd.read_excel(BytesIO(excel_path), sheet_name=None)
+        else:
+            excel_data = pd.read_excel(excel_path, sheet_name=None)
         
         # Process each sheet
         text_content = []
@@ -281,7 +285,7 @@ def process_documents_from_uploads(deleted_filename = None):
         print(traceback.format_exc())
         return [Document(page_content=basic_info, metadata={"source": "basic_info", "type": "overview"})]
 
-def process_documents_from_uploads_github(deleted_filename = None):
+def process_documents_from_uploads_github():
     """Process all documents in the uploads directory and convert to Document objects"""
     documents = []
     token = os.getenv("GITHUB_TOKEN")
@@ -323,9 +327,6 @@ def process_documents_from_uploads_github(deleted_filename = None):
         
         for file_info in response.json():
             name = file_info["name"]
-            if name == deleted_filename or not name.lower().endswith(('.xlsx', '.pdf', '.txt', '.md', '.csv')):
-                continue
-
             file_url = file_info.get("download_url")
             file_content = requests.get(file_url)
             if file_content.status_code != 200:
