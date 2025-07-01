@@ -119,7 +119,6 @@ def get_db_connection():
         port=int(os.getenv('DB_PORT', os.getenv('MYSQLPORT')))
     )
 
-# File processing utilities for knowledge base
 def extract_text_from_pdf(pdf_path, max_pages=None):
     """Extract text from a PDF file, optionally limited to max_pages"""
     try:
@@ -128,12 +127,22 @@ def extract_text_from_pdf(pdf_path, max_pages=None):
             reader = pypdf.PdfReader(file)
             pages_to_read = len(reader.pages) if max_pages is None else min(len(reader.pages), max_pages)
             print(f"Extracting text from PDF: {pdf_path} - {pages_to_read} pages")
+
             for i in range(pages_to_read):
-                page = reader.pages[i]
-                text += page.extract_text() + "\n\n"
-        return text
+                try:
+                    page = reader.pages[i]
+                    extracted = page.extract_text()
+                    if extracted:
+                        text += extracted + "\n\n"
+                    else:
+                        print(f"[Warning] No text extracted from page {i}")
+                except Exception as page_err:
+                    print(f"[Error] Failed to extract page {i}: {page_err}")
+                    continue  # Skip to next page
+
+        return text.strip() if text else "Tidak ada teks yang bisa diekstrak dari PDF."
     except Exception as e:
-        print(f"Error extracting text from PDF {pdf_path}: {str(e)}")
+        print(f"[Fatal Error] extracting text from PDF {pdf_path}: {str(e)}")
         return f"Error extracting PDF content: {str(e)}"
 
 def extract_data_from_excel(excel_path):
