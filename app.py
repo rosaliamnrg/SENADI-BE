@@ -1451,7 +1451,7 @@ def admin_delete_file_github(filename):
         token = os.getenv("GITHUB_TOKEN")
         repo = os.getenv("GITHUB_REPO")
         github_path = os.getenv("GITHUB_FOLDER_PATH")
-        github_api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
+        github_api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}/{filename}"
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json"
@@ -1713,7 +1713,7 @@ def upload_file_github():
         token = os.getenv("GITHUB_TOKEN")
         repo = os.getenv("GITHUB_REPO")
         github_path = os.getenv("GITHUB_FOLDER_PATH")
-        api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
+        api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}/{filename}"
 
         encoded_content = base64.b64encode(file_bytes).decode("utf-8")
         headers = {
@@ -1810,6 +1810,7 @@ def upload_file_github():
         # 9. Selesai
         cursor.close()
         conn.close()
+        print("File uploaded to github, saved in DB, and FAISS updated")
 
         return jsonify({
             "success": True,
