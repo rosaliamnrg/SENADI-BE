@@ -394,185 +394,86 @@ def download_faiss_index_from_github():
             return False
     return True
 
-# def initialize_vector_store():
-#     """Initialize or load the vector store with documents from uploads"""
-#     global vector_store, qa_chain
-    
-#     try:
-#         # Try to load existing vector store
-#         if os.path.exists(os.path.join(VECTOR_STORE_FOLDER_PATH, "index.faiss")):
-#             print("Loading existing FAISS index...")
-#             try:
-#                 # Use GoogleGenerativeAIEmbeddings as default - more reliable
-#                 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
-#                 vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings, allow_dangerous_deserialization=True)
-#                 print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
-#             except Exception as load_error:
-#                 print(f"Error loading FAISS index: {str(load_error)}")
-#                 # If loading fails, we'll create a new index
-#                 vector_store = None
-
-#         # If vector store couldn't be loaded or doesn't exist, create a new one
-#         if vector_store is None:
-#             print("Creating new vector store...")
-#             # documents = process_documents_from_uploads()
-#             documents = process_documents_from_uploads_github()
-            
-#             if not documents:
-#                 print("No documents found to process")
-#                 return False
-                
-#             print(f"Creating embeddings for {len(documents)} documents")
-            
-#             # Use GoogleGenerativeAIEmbeddings as default
-#             try:
-#                 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
-#                 vector_store = FAISS.from_documents(documents, embeddings)
-#                 print("Created FAISS index with GoogleGenerativeAIEmbeddings")
-                
-#                 # Save the index
-#                 vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
-#                 print(f"Saved FAISS index to {VECTOR_STORE_FOLDER_PATH}")
-#             except Exception as embed_error:
-#                 print(f"Error creating embeddings: {str(embed_error)}")
-#                 traceback.print_exc()
-#                 return False
-        
-#         # Create the QA chain
-#         if GEMINI_AVAILABLE and vector_store:
-#             retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
-            
-#             # Template for Gemini
-#             template = """
-#             Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
-
-#             Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
-
-#             Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
-
-#             Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
-
-#             Jika informasi tidak tersedia dalam konteks, katakan secara formal:
-#             **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
-
-#             JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
-
-#             Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
-
-#             Konteks:
-#             {context}
-            
-#             Pertanyaan: {question}
-            
-#             Jawaban yang informatif, lengkap, dan presisi:
-#             """
-            
-#             PROMPT = PromptTemplate(
-#                 template=template,
-#                 input_variables=["context", "question"],
-#             )
-            
-#             llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
-            
-#             qa_chain = RetrievalQA.from_chain_type(
-#                 llm=llm,
-#                 chain_type="stuff",
-#                 retriever=retriever,
-#                 return_source_documents=True,
-#                 chain_type_kwargs={"prompt": PROMPT}
-#             )
-            
-#             print("Successfully created QA chain with Gemini")
-#             return True
-#         else:
-#             print("Could not create QA chain - Gemini not available or vector store failed")
-#             return False
-#     except Exception as e:
-#         print(f"Error initializing vector store: {str(e)}")
-#         print(traceback.format_exc())
-#         return False
-
 def initialize_vector_store():
     """Initialize or load the vector store with documents from uploads"""
     global vector_store, qa_chain
-
+    
     try:
-        # Use GoogleGenerativeAIEmbeddings
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-exp-03-07",
-            google_api_key=GOOGLE_API_KEY
-        )
-
-        # Load existing FAISS index if it exists
+        # Try to load existing vector store
         if os.path.exists(os.path.join(VECTOR_STORE_FOLDER_PATH, "index.faiss")):
             print("Loading existing FAISS index...")
             try:
-                vector_store = FAISS.load_local(
-                    VECTOR_STORE_FOLDER_PATH,
-                    embeddings,
-                    allow_dangerous_deserialization=True
-                )
-                print("Successfully loaded FAISS index")
+                # Use GoogleGenerativeAIEmbeddings as default - more reliable
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings, allow_dangerous_deserialization=True)
+                print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
             except Exception as load_error:
                 print(f"Error loading FAISS index: {str(load_error)}")
+                # If loading fails, we'll create a new index
                 vector_store = None
 
-        # If FAISS is not loaded, build it from documents
+        # If vector store couldn't be loaded or doesn't exist, create a new one
         if vector_store is None:
-            print("Creating new vector store from documents...")
+            print("Creating new vector store...")
+            # documents = process_documents_from_uploads()
             documents = process_documents_from_uploads_github()
             
             if not documents:
                 print("No documents found to process")
                 return False
-
+                
             print(f"Creating embeddings for {len(documents)} documents")
-
-            # Batching embedding
-            batch_size = 100
-            all_texts = []
-            all_metadata = []
-            all_embeddings = []
-
-            for i in range(0, len(documents), batch_size):
-                batch = documents[i:i + batch_size]
-                try:
-                    texts = [doc.page_content for doc in batch]
-                    metadatas = [doc.metadata for doc in batch]
-
-                    embeddings_batch = embeddings.embed_documents(texts)
-
-                    all_embeddings.extend(embeddings_batch)
-                    all_texts.extend(texts)
-                    all_metadata.extend(metadatas)
-                except Exception as e:
-                    print(f"Error in batch {i // batch_size + 1}: {e}")
-                    time.sleep(60)
-
-            dimension = len(all_embeddings[0])
-            index = faiss.IndexFlatL2(dimension)
-            vector_store = FAISS(
-                embedding_function=embeddings,
-                index=index,
-                docstore=InMemoryDocstore({}),
-                index_to_docstore_id={},
-                docstore_id_to_index={}
-            )
-            vector_store.add_texts(all_texts, metadatas=all_metadata, embeddings=all_embeddings)
-
-            vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
-            print(f"Saved new FAISS index to {VECTOR_STORE_FOLDER_PATH}")
-
-        # Setup QA chain
+            
+            # Use GoogleGenerativeAIEmbeddings as default
+            try:
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                vector_store = FAISS.from_documents(documents, embeddings)
+                print("Created FAISS index with GoogleGenerativeAIEmbeddings")
+                
+                # Save the index
+                vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+                print(f"Saved FAISS index to {VECTOR_STORE_FOLDER_PATH}")
+            except Exception as embed_error:
+                print(f"Error creating embeddings: {str(embed_error)}")
+                traceback.print_exc()
+                return False
+        
+        # Create the QA chain
         if GEMINI_AVAILABLE and vector_store:
             retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+            
+            # Template for Gemini
+            template = """
+            Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
-            # Prompt
-            template = """... (template Anda tetap sama) ..."""
-            PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
+            Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
 
+            Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+
+            Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+
+            Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+            **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
+
+            JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+
+            Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
+
+            Konteks:
+            {context}
+            
+            Pertanyaan: {question}
+            
+            Jawaban yang informatif, lengkap, dan presisi:
+            """
+            
+            PROMPT = PromptTemplate(
+                template=template,
+                input_variables=["context", "question"],
+            )
+            
             llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
-
+            
             qa_chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
@@ -580,13 +481,12 @@ def initialize_vector_store():
                 return_source_documents=True,
                 chain_type_kwargs={"prompt": PROMPT}
             )
-
+            
             print("Successfully created QA chain with Gemini")
             return True
         else:
             print("Could not create QA chain - Gemini not available or vector store failed")
             return False
-
     except Exception as e:
         print(f"Error initializing vector store: {str(e)}")
         print(traceback.format_exc())
@@ -1527,7 +1427,7 @@ def admin_delete_file(filename):
         documents = process_documents_from_uploads(deleted_filename = filename)
 
         if documents:
-            embeddings = genai.GenerativeModel(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
+            embeddings = genai.GenerativeModel(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
@@ -1660,7 +1560,7 @@ def admin_delete_file_github(filename):
         else:
             # Bangun FAISS baru
             embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/gemini-embedding-exp-03-07",
+                model="models/text-embedding-004",
                 google_api_key=GOOGLE_API_KEY
             )
             vector_store = FAISS.from_documents(documents, embeddings)
@@ -1950,7 +1850,7 @@ def upload_file_github():
                 ]
 
             if new_documents:
-                embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
                 if vector_store: 
                     vector_store.add_documents(new_documents)
                     vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
@@ -2102,7 +2002,7 @@ def upload_file():
         documents = process_documents_from_uploads()
 
         if documents:
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
