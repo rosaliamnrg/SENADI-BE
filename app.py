@@ -121,68 +121,31 @@ def get_db_connection():
         port=int(os.getenv('DB_PORT', os.getenv('MYSQLPORT')))
     )
 
-# def extract_text_from_pdf_in_batches(pdf_path, max_pages=None):
-#     """Extract text from a PDF file using pdfplumber, optionally limited to max_pages"""
-#     try:
-#         text = ""
-#         with pdfplumber.open(pdf_path) as pdf:
-#             total_pages = len(pdf.pages)
-#             pages_to_read = total_pages if max_pages is None else min(total_pages, max_pages)
-#             print(f"Extracting text from PDF: {pdf_path} - {pages_to_read} pages")
-
-#             for i in range(pages_to_read):
-#                 try:
-#                     page = pdf.pages[i]
-#                     extracted = page.extract_text()
-#                     if extracted:
-#                         text += extracted + "\n\n"
-#                     else:
-#                         print(f"[Warning] No text extracted from page {i}")
-#                 except Exception as page_err:
-#                     print(f"[Error] Failed to extract page {i}: {page_err}")
-#                     continue  # Skip to next page
-
-#         return text.strip() if text else "Tidak ada teks yang bisa diekstrak dari PDF."
-#     except Exception as e:
-#         print(f"[Fatal Error] extracting text from PDF {pdf_path}: {str(e)}")
-#         return f"Error extracting PDF content: {str(e)}"
-
-def extract_text_from_pdf_in_batches(pdf_path, batch_size=50):
-    """
-    Ekstrak teks dari file PDF per batch halaman agar tidak over-memory.
-    Return: List of (batch_index, text_chunk)
-    """
-    import pdfplumber
-
-    batches = []
+def extract_text_from_pdf(pdf_path, max_pages=None):
+    """Extract text from a PDF file using pdfplumber, optionally limited to max_pages"""
     try:
+        text = ""
         with pdfplumber.open(pdf_path) as pdf:
             total_pages = len(pdf.pages)
-            print(f"Total halaman PDF: {total_pages}")
+            pages_to_read = total_pages if max_pages is None else min(total_pages, max_pages)
+            print(f"Extracting text from PDF: {pdf_path} - {pages_to_read} pages")
 
-            for start in range(0, total_pages, batch_size):
-                end = min(start + batch_size, total_pages)
-                text = ""
+            for i in range(pages_to_read):
+                try:
+                    page = pdf.pages[i]
+                    extracted = page.extract_text()
+                    if extracted:
+                        text += extracted + "\n\n"
+                    else:
+                        print(f"[Warning] No text extracted from page {i}")
+                except Exception as page_err:
+                    print(f"[Error] Failed to extract page {i}: {page_err}")
+                    continue  # Skip to next page
 
-                for i in range(start, end):
-                    try:
-                        page = pdf.pages[i]
-                        extracted = page.extract_text()
-                        if extracted:
-                            text += extracted + "\n\n"
-                        else:
-                            print(f"[Warning] No text on page {i}")
-                    except Exception as page_err:
-                        print(f"[Error] Failed on page {i}: {page_err}")
-                        continue
-
-                if text.strip():
-                    batches.append((start // batch_size, text.strip()))
-
+        return text.strip() if text else "Tidak ada teks yang bisa diekstrak dari PDF."
     except Exception as e:
-        print(f"[Fatal Error] reading PDF: {e}")
-
-    return batches
+        print(f"[Fatal Error] extracting text from PDF {pdf_path}: {str(e)}")
+        return f"Error extracting PDF content: {str(e)}"
 
 def extract_data_from_excel(excel_path):
     """Extract data from Excel file, handling multiple formats and sheets"""
@@ -283,7 +246,7 @@ def process_documents_from_uploads(deleted_filename = None):
             print(f"Processing PDF: {filename} (max {max_pages} pages)")
             
             try:
-                text = extract_text_from_pdf_in_batches(filepath, max_pages)
+                text = extract_text_from_pdf(filepath, max_pages)
                 chunks = text_splitter.split_text(text)
                 print(f"Split PDF into {len(chunks)} chunks")
                 
@@ -378,7 +341,7 @@ def process_documents_from_uploads_github(deleted_filename = None):
                 docs = extract_data_from_excel(file_content.content)
                 documents.extend(docs)
             elif name.lower().endswith('.pdf'):
-                text = extract_text_from_pdf_in_batches(file_content.content)
+                text = extract_text_from_pdf(file_content.content)
                 chunks = text_splitter.split_text(text)
                 for i, chunk in enumerate(chunks):
                     documents.append(Document(page_content=chunk, metadata={"source": name, "chunk": i}))
@@ -1761,11 +1724,11 @@ def admin_get_chat_plural(chat_id):
 def upload_file_github():
     global qa_chain, vector_store
     try:
-        # === 1. Autentikasi Admin ===
+        # 1. Ambil data user
         user_id = get_jwt_identity()
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
         user_name = user.get('username')
 
@@ -1774,92 +1737,172 @@ def upload_file_github():
             conn.close()
             return jsonify({"error": "Admin access required"}), 403
 
-        # === 2. Validasi dan simpan file ===
+        # 2. Ambil file dari request
         file = request.files.get('files')
         if not file:
             return jsonify({"error": "No file uploaded"}), 400
 
-        if file.content_length > 15 * 1024 * 1024:  # Batasi maksimal 15MB
-            return jsonify({"error": "Ukuran file maksimal 15MB"}), 400
+        secure_name = secure_filename(file.filename)
+        filename = os.path.basename(secure_name)
+        file_bytes = file.read()
 
-        filename = secure_filename(file.filename)
-        file_type = filename.split('.')[-1].lower()
+        # 3. Tentukan tipe file
+        file_type = 'unknown'
+        if filename.lower().endswith('.pdf'):
+            file_type = 'pdf'
+        elif filename.lower().endswith(('.xlsx', '.xls')):
+            file_type = 'excel'
+        elif filename.lower().endswith('.csv'):
+            file_type = 'csv'
+        elif filename.lower().endswith('.txt'):
+            file_type = 'text'
 
-        allowed_types = ['pdf', 'xlsx', 'xls', 'csv', 'txt']
-        if file_type not in allowed_types:
-            return jsonify({"error": "Tipe file tidak didukung"}), 400
-
+        # 4. Simpan sementara di /tmp
         temp_path = f"/tmp/{filename}"
-        file.save(temp_path)  # Simpan ke disk, hindari read() ke memori
+        with open(temp_path, "wb") as temp:
+            temp.write(file_bytes)
 
-        # === 3. Ekstraksi konten ringan ===
-        content = extract_text_from_pdf_in_batches(temp_path, max_pages=100) if file_type == 'pdf' else None
-        if not content:
-            content = "Tidak ada teks yang bisa diekstrak dari file."
+        # 5. Ekstraksi konten
+        content = None
+        try:
+            if file_type == 'pdf':
+                content = extract_text_from_pdf_in_batches(temp_path)
+            elif file_type == 'excel':
+                excel_data = extract_data_from_excel(temp_path)
+                content = json.dumps(excel_data, ensure_ascii=False, default=str)
+            elif file_type in ['csv', 'text']:
+                content = file_bytes.decode('utf-8')
+        except Exception as e:
+            content = f"Error extracting content: {str(e)}"
 
-        # === 4. Upload ke GitHub ===
-        with open(temp_path, "rb") as f:
-            file_bytes = f.read()
+        # 6. Upload ke GitHub
+        token = os.getenv("GITHUB_TOKEN")
+        repo = os.getenv("GITHUB_REPO")
+        github_path = os.getenv("GITHUB_FOLDER_PATH")
+        api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}/{filename}"
+
         encoded_content = base64.b64encode(file_bytes).decode("utf-8")
-
-        github_token = os.getenv("GITHUB_TOKEN")
-        github_repo = os.getenv("GITHUB_REPO")
-        github_folder = os.getenv("GITHUB_FOLDER_PATH")
-        api_url = f"https://api.github.com/repos/{github_repo}/contents/{github_folder}/{filename}"
-
         headers = {
-            "Authorization": f"Bearer {github_token}",
+            "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json"
         }
         data = {
             "message": f"Upload {filename}",
-            "content": encoded_content
+            "content": encoded_content,
         }
+
         response = requests.put(api_url, headers=headers, json=data)
         if response.status_code not in [200, 201]:
             return jsonify({"error": f"GitHub upload failed: {response.text}"}), 500
 
-        # === 5. Simpan metadata ke DB ===
-        cursor.execute(
-            "INSERT INTO knowledge_files (filename, file_type, uploaded_by, created_at) VALUES (%s, %s, %s, %s)",
-            (filename, file_type, user_name, datetime.now())
-        )
-        conn.commit()
+        # 7. Simpan metadata ke database
+        try:
+            cursor.execute("DESCRIBE knowledge_files")
+            columns = cursor.fetchall()
+            # column_names = [col['Field'] for col in columns]
 
-        # === 6. Tambahkan ke FAISS ===
-        print("Updating FAISS index...")
-        if file_type == 'pdf':
-            text_chunks = text_splitter.split_text(content)
-            new_documents = [
-                Document(page_content=chunk, metadata={"source": filename, "chunk": i, "type": "pdf"})
-                for i, chunk in enumerate(text_chunks)
-            ]
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
-            if vector_store:
-                vector_store.add_documents(new_documents)
-                vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
-
-            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2),
-                chain_type="stuff",
-                retriever=retriever,
-                return_source_documents=True,
-                chain_type_kwargs={"prompt": PROMPT}
+            # if 'content' in column_names:
+            #     cursor.execute(
+            #         "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
+            #         (filename, file_type, user_id,)
+            #     )
+            # else:
+            #     cursor.execute(
+            #         "INSERT INTO knowledge_files (filename, file_type, uploaded_by) VALUES (%s, %s, %s)",
+            #         (filename, file_type, user_id,)
+            #     )
+            cursor.execute(
+                "INSERT INTO knowledge_files (filename, file_type, uploaded_by, created_at) VALUES (%s, %s, %s, %s)",
+                (filename, file_type, user_name, datetime.now(), )
             )
+            conn.commit()
+        except Exception as db_err:
+            return jsonify({"error": f"DB Error: {str(db_err)}"}), 500
 
+        # 8. Update FAISS dari dokumen yang baru
+        try:
+            print("Updating FAISS index...")
+            new_documents = []
+            if file_type == 'pdf':
+                text_chunks = text_splitter.split_text(content)
+                new_documents = [
+                    Document(page_content=chunk, metadata={"source": filename, "chunk": i, "type": "pdf"})
+                    for i, chunk in enumerate(text_chunks)
+                ]
+            elif file_type == 'excel':
+                new_documents = extract_data_from_excel(temp_path)
+            elif file_type in ['csv', 'text']:
+                text_chunks = text_splitter.split_text(content)
+                new_documents = [
+                    Document(page_content=chunk, metadata={"source": filename, "chunk": i, "type": file_type})
+                    for i, chunk in enumerate(text_chunks)
+                ]
+
+            if new_documents:
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                if vector_store: 
+                    vector_store.add_documents(new_documents)
+                    vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+
+                # vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings)
+                # vector_store.add_documents(new_documents)
+                # vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+
+                retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+
+                PROMPT = PromptTemplate(
+                    template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+
+                    Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
+    
+                    Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari *dokumen atau file terbaru* (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+    
+                    Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+    
+                    Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+                    *"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."*
+    
+                    JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+    
+                    Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
+
+                    {context}
+
+                    Pertanyaan: {question}
+
+                    Jawaban yang akurat dan relevan:""",
+                                        input_variables=["context", "question"],
+                )
+
+                llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
+
+                qa_chain = RetrievalQA.from_chain_type(
+                    llm=llm,
+                    chain_type="stuff",
+                    retriever=retriever,
+                    return_source_documents=True,
+                    chain_type_kwargs={"prompt": PROMPT}
+                )
+        except Exception as indexing_err:
+            print(f"FAISS indexing error: {str(indexing_err)}")
+
+        # 9. Selesai
         cursor.close()
         conn.close()
+        print("File uploaded to github, saved in DB, and FAISS updated")
+
         return jsonify({
             "success": True,
-            "message": "File berhasil diupload ke GitHub, disimpan ke DB, dan dimasukkan ke FAISS.",
-            "file": {"name": filename, "type": file_type}
+            "message": "File uploaded to GitHub, saved in DB, and FAISS updated.",
+            "file": {
+                "name": filename,
+                "type": file_type
+            }
         }), 200
 
     except Exception as e:
         print(f"Upload error: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/upload', methods=['POST'])
 @jwt_required()
@@ -1909,7 +1952,7 @@ def upload_file():
         content = None
         try:
             if file_type == 'pdf':
-                content = extract_text_from_pdf_in_batches(file_path)
+                content = extract_text_from_pdf(file_path)
             elif file_type == 'excel':
                 excel_data = extract_data_from_excel(file_path)
                 content = json.dumps(excel_data, ensure_ascii=False, default=str)
