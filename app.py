@@ -58,7 +58,7 @@ if GOOGLE_API_KEY:
             print(f"Error with {MODEL_NAME}: {str(model_error)}")
             try:
                 # Try alternative model name
-                MODEL_NAME = 'gemini-1.5-flash'
+                MODEL_NAME = 'gemini-2.0-flash-lite'
                 model = genai.GenerativeModel(MODEL_NAME)
                 test_response = model.generate_content("Test")
                 if test_response:
@@ -402,10 +402,10 @@ def initialize_vector_store():
         if os.path.exists(os.path.join(VECTOR_STORE_FOLDER_PATH, "index.faiss")):
             print("Loading existing FAISS index...")
             try:
-                # Use SentenceTransformerEmbeddings as default - more reliable
-                embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
+                # Use GoogleGenerativeAIEmbeddings as default - more reliable
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
                 vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings, allow_dangerous_deserialization=True)
-                print("Successfully loaded FAISS index with SentenceTransformerEmbeddings")
+                print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
             except Exception as load_error:
                 print(f"Error loading FAISS index: {str(load_error)}")
                 # If loading fails, we'll create a new index
@@ -423,11 +423,11 @@ def initialize_vector_store():
                 
             print(f"Creating embeddings for {len(documents)} documents")
             
-            # Use SentenceTransformerEmbeddings as default
+            # Use GoogleGenerativeAIEmbeddings as default
             try:
-                embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
                 vector_store = FAISS.from_documents(documents, embeddings)
-                print("Created FAISS index with SentenceTransformerEmbeddings")
+                print("Created FAISS index with GoogleGenerativeAIEmbeddings")
                 
                 # Save the index
                 vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
@@ -1403,7 +1403,7 @@ def admin_delete_file(filename):
         documents = process_documents_from_uploads(deleted_filename = filename)
 
         if documents:
-            embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
@@ -1535,8 +1535,8 @@ def admin_delete_file_github(filename):
             print("No documents left after deletion.")
         else:
             # Bangun FAISS baru
-            embeddings = SentenceTransformerEmbeddings(
-                model="all-MiniLM-L6-v2",
+            embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/text-embedding-004",
                 google_api_key=GOOGLE_API_KEY
             )
             vector_store = FAISS.from_documents(documents, embeddings)
@@ -1826,7 +1826,7 @@ def upload_file_github():
                 ]
 
             if new_documents:
-                embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
                 if vector_store: 
                     vector_store.add_documents(new_documents)
                     vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
@@ -1978,7 +1978,7 @@ def upload_file():
         documents = process_documents_from_uploads()
 
         if documents:
-            embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
