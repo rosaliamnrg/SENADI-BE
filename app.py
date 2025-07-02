@@ -1766,7 +1766,7 @@ def upload_file_github():
         content = None
         try:
             if file_type == 'pdf':
-                content = extract_text_from_pdf_in_batches(temp_path)
+                content = extract_text_from_pdf(temp_path)
             elif file_type == 'excel':
                 excel_data = extract_data_from_excel(temp_path)
                 content = json.dumps(excel_data, ensure_ascii=False, default=str)
