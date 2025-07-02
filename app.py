@@ -105,7 +105,7 @@ jwt = JWTManager(app)
 # Global vector store variable
 vector_store = None
 qa_chain = None
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150)
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
 
 # Configure database
 def get_db_connection():
@@ -402,10 +402,10 @@ def initialize_vector_store():
         if os.path.exists(os.path.join(VECTOR_STORE_FOLDER_PATH, "index.faiss")):
             print("Loading existing FAISS index...")
             try:
-                # Use GoogleGenerativeAIEmbeddings as default - more reliable
-                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                # Use SentenceTransformerEmbeddings as default - more reliable
+                embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
                 vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings, allow_dangerous_deserialization=True)
-                print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
+                print("Successfully loaded FAISS index with SentenceTransformerEmbeddings")
             except Exception as load_error:
                 print(f"Error loading FAISS index: {str(load_error)}")
                 # If loading fails, we'll create a new index
@@ -423,11 +423,11 @@ def initialize_vector_store():
                 
             print(f"Creating embeddings for {len(documents)} documents")
             
-            # Use GoogleGenerativeAIEmbeddings as default
+            # Use SentenceTransformerEmbeddings as default
             try:
-                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
                 vector_store = FAISS.from_documents(documents, embeddings)
-                print("Created FAISS index with GoogleGenerativeAIEmbeddings")
+                print("Created FAISS index with SentenceTransformerEmbeddings")
                 
                 # Save the index
                 vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
@@ -439,7 +439,7 @@ def initialize_vector_store():
         
         # Create the QA chain
         if GEMINI_AVAILABLE and vector_store:
-            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
             
             # Template for Gemini
             template = """
@@ -1403,13 +1403,13 @@ def admin_delete_file(filename):
         documents = process_documents_from_uploads(deleted_filename = filename)
 
         if documents:
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+            embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
             
             # Perbarui QA chain agar pencarian bisa pakai vector store baru
-            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
             
             PROMPT = PromptTemplate(
                 template="""
@@ -1535,15 +1535,15 @@ def admin_delete_file_github(filename):
             print("No documents left after deletion.")
         else:
             # Bangun FAISS baru
-            embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/text-embedding-004",
+            embeddings = SentenceTransformerEmbeddings(
+                model="all-MiniLM-L6-v2",
                 google_api_key=GOOGLE_API_KEY
             )
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(faiss_folder)
             print("Vector store rebuilt without deleted file.")
 
-            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
             PROMPT = PromptTemplate(
                 template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
@@ -1594,7 +1594,7 @@ def admin_delete_file_github(filename):
         #     return
 
         # Update retriever dan chain
-        # retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+        # retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
         # PROMPT = PromptTemplate(
         #     template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
 
@@ -1826,7 +1826,7 @@ def upload_file_github():
                 ]
 
             if new_documents:
-                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+                embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
                 if vector_store: 
                     vector_store.add_documents(new_documents)
                     vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
@@ -1835,7 +1835,7 @@ def upload_file_github():
                 # vector_store.add_documents(new_documents)
                 # vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
 
-                retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+                retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
 
                 PROMPT = PromptTemplate(
                     template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
@@ -1978,13 +1978,13 @@ def upload_file():
         documents = process_documents_from_uploads()
 
         if documents:
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+            embeddings = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
             
             # Perbarui QA chain agar pencarian bisa pakai vector store baru
-            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
             
             PROMPT = PromptTemplate(
                 template="""
