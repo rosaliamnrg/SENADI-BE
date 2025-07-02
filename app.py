@@ -445,7 +445,7 @@ def initialize_vector_store():
             template = """
             Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
-            Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+            Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
 
             Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
 
@@ -1415,7 +1415,7 @@ def admin_delete_file(filename):
                 template="""
                 Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
-                Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+                Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
 
                 Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
 
@@ -1547,7 +1547,7 @@ def admin_delete_file_github(filename):
             PROMPT = PromptTemplate(
                 template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
-                Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+               Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
 
                 Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
 
@@ -1840,7 +1840,7 @@ def upload_file_github():
                 PROMPT = PromptTemplate(
                     template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
-                    Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+                    Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
     
                     Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
     
@@ -1990,7 +1990,7 @@ def upload_file():
                 template="""
                 Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
-                Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Latih dirimu sendiri untuk mempelajari dan memparafrase dokumen. Pahami bahwa beberapa kalimat dapat memiliki arti dan sinonim yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban yang relevan berdasarkan makna, bukan hanya kemiripan kata secara literal.
+                Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
 
                 Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
 
