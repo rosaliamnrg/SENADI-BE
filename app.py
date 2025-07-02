@@ -31,7 +31,7 @@ from langchain.prompts import PromptTemplate
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_core.documents import Document
-from langchain.docstore import InMemoryDocstore
+from langchain_community.docstore.in_memory import InMemoryDocstore
 
 # Load environment variables
 load_dotenv()
