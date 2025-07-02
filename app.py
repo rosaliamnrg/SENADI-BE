@@ -297,18 +297,7 @@ def process_documents_from_uploads_github(deleted_filename = None):
     }
     
     basic_info = """
-    Survei Sosial Ekonomi Nasional (Susenas) adalah sistem survei yang digunakan BPS untuk mengumpulkan data sosial-ekonomi penduduk Indonesia. 
-    Susenas pertama kali dilakukan pada tahun 1963. Susenas mengumpulkan data konsumsi/pengeluaran rumah tangga, pendidikan, kesehatan, fertilitas, 
-    perumahan, dan kondisi sosial-ekonomi lainnya. Data Susenas digunakan untuk berbagai perencanaan, monitoring, dan evaluasi kebijakan pemerintah.
-    
-    Survei Sosial Ekonomi Nasional (Susenas) adalah sebuah kegiatan survei yang dilaksanakan oleh Badan Pusat Statistik (BPS) Indonesia. 
-    Survei ini bertujuan untuk mengumpulkan data sosial ekonomi penduduk Indonesia, yang mencakup bidang demografi, kesehatan, pendidikan, 
-    perumahan, serta konsumsi dan pengeluaran rumah tangga. Susenas merupakan sumber data utama untuk menghitung berbagai indikator kesejahteraan 
-    rakyat di Indonesia.
-    
-    Bot Susenas adalah asisten virtual yang dirancang untuk membantu menjawab pertanyaan seputar Survei Sosial Ekonomi Nasional (Susenas). 
-    Bot ini dapat memberikan informasi tentang konsep, definisi, metodologi, dan hasil-hasil Susenas, serta membantu pengguna dalam mengakses 
-    dan memahami data Susenas untuk berbagai keperluan analisis dan penelitian.
+    Badan Pusat Statistik (BPS) merupakan lembaga pemerintah non kementerian yang bertanggung jawab langsung kepada presiden. Berdasarkan Undang-Undang Republik Indonesia No 16 Tahun 1997, salah satu peranan BPS adalah menyediakan kebutuhan data bagi pemerintah dan masyarakat. BPS mengumpulkan data dari berbagai sumber dengan cara sensus, survei, kompilasi produk administrasi, dan cara lain sesuai perkembangan ilmu pengetahuan dan teknologi. Survei Sosial Ekonomi Nasional (Susenas) merupakan sandaran utama Indonesia dalam hal kebutuhan data untuk mengimplementasikan pembangunan yang sejalan dengan Tujuan Pembangunan Berkelanjutan/Sustainable Development Goals (TPB/SDGs). Pertanyaan-pertanyaan Susenas, baik Susenas Kor maupun Susenas Modul merupakan tulang punggung indikator SDGs, RPJMN, dan kesejahteraan bangsa.
     """
     
     # Add basic info as a document
