@@ -403,7 +403,7 @@ def initialize_vector_store():
             print("Loading existing FAISS index...")
             try:
                 # Use GoogleGenerativeAIEmbeddings as default - more reliable
-                embeddings = genai.GenerativeModel("models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
                 vector_store = FAISS.load_local(VECTOR_STORE_FOLDER_PATH, embeddings, allow_dangerous_deserialization=True)
                 print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
             except Exception as load_error:
@@ -425,7 +425,7 @@ def initialize_vector_store():
             
             # Use GoogleGenerativeAIEmbeddings as default
             try:
-                embeddings = genai.GenerativeModel("models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
                 vector_store = FAISS.from_documents(documents, embeddings)
                 print("Created FAISS index with GoogleGenerativeAIEmbeddings")
                 
@@ -1849,7 +1849,7 @@ def upload_file_github():
                 ]
 
             if new_documents:
-                embeddings = genai.GenerativeModel("models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
                 if vector_store: 
                     vector_store.add_documents(new_documents)
                     vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
@@ -2001,7 +2001,7 @@ def upload_file():
         documents = process_documents_from_uploads()
 
         if documents:
-            embeddings = genai.GenerativeModel("models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
