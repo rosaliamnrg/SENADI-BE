@@ -1416,7 +1416,7 @@ def admin_delete_file(filename):
         documents = process_documents_from_uploads(deleted_filename = filename)
 
         if documents:
-            embeddings = genai.GenerativeModel(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GOOGLE_API_KEY)
             vector_store = FAISS.from_documents(documents, embeddings)
             vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
             print("Vector store updated and saved after upload")
