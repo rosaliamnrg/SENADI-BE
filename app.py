@@ -1824,7 +1824,13 @@ def upload_file_github():
             print("Updating FAISS index...")
             new_documents = []
             if file_type == 'pdf':
+                # Ekstrak teks dari PDF
+                content = extract_text_from_pdf(temp_path)
+                
+                # Pecah teks menjadi chunk
                 text_chunks = text_splitter.split_text(content)
+                
+                # Buat dokumen dari setiap chunk
                 new_documents = [
                     Document(page_content=chunk, metadata={"source": filename, "chunk": i, "type": "pdf"})
                     for i, chunk in enumerate(text_chunks)
