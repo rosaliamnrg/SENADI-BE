@@ -17,4 +17,5 @@ langchain-google-genai>=0.0.5
 langchain-community
 pydantic
 openpyxl
+gunicorn
 fitz

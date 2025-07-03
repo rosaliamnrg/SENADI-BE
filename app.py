@@ -2412,7 +2412,7 @@ def quick_create_chat():
         
         # Generate chat ID
         # chat_id = str(uuid.uuid4())
-        print(f"Generated quick chat ID: {chat_id}")
+        # print(f"Generated quick chat ID: {chat_id}")
         
         # Insert chat with bare minimum fields
         try:
@@ -2583,7 +2583,7 @@ def simple_create_chat():
             
         # Generate chat ID
         # chat_id = str(uuid.uuid4())
-        print(f"Generated chat ID: {chat_id}")
+        # print(f"Generated chat ID: {chat_id}")
         
         # Create chat with minimal fields, without 'title' column
         try:
