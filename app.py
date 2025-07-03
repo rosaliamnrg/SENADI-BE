@@ -1459,6 +1459,15 @@ def admin_delete_file(filename):
         print(e)
         return jsonify({"error": str(e)}), 500
 
+def add_documents_in_batches(vector_store, documents: List[Document], embeddings, batch_size: int = 10):
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i:i + batch_size]
+        try:
+            vector_store_batch = FAISS.from_documents(batch, embeddings)
+            vector_store.merge_from(vector_store_batch)
+        except Exception as e:
+            print(f"[Batch error] {str(e)}")
+
 @app.route('/admin/delete_github/<path:filename>', methods=['GET'])
 @jwt_required()
 def admin_delete_file_github(filename):
@@ -1476,36 +1485,6 @@ def admin_delete_file_github(filename):
             cursor.close()
             conn.close()
             return jsonify({"error": "Admin access required"}), 403
-
-        # 2. Hapus dari DB
-        cursor.execute("DELETE FROM knowledge_files WHERE filename = %s", (filename,))
-        conn.commit()
-        if cursor.rowcount == 0:
-            cursor.close()
-            conn.close()
-            return jsonify({"error": "File not found in database"}), 404
-
-        # 3. Hapus dari GitHub
-        token = os.getenv("GITHUB_TOKEN")
-        repo = os.getenv("GITHUB_REPO")
-        github_path = os.getenv("GITHUB_FOLDER_PATH")
-        github_api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}/{filename}"
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json"
-        }
-
-        get_response = requests.get(github_api_url, headers=headers)
-        if get_response.status_code == 200:
-            sha = get_response.json().get("sha")
-            delete_response = requests.delete(github_api_url, headers=headers, json={
-                "message": f"Delete {filename}",
-                "sha": sha,
-            })
-            if delete_response.status_code not in [200, 204]:
-                print(f"GitHub deletion failed: {delete_response.text}")
-        else:
-            print(f"GitHub file not found: {get_response.text}")
 
         # 4. Hapus dokumen terkait dari vector store
         if vector_store is None:
@@ -1537,7 +1516,10 @@ def admin_delete_file_github(filename):
                 model="models/text-embedding-004",
                 google_api_key=GOOGLE_API_KEY
             )
-            vector_store = FAISS.from_documents(documents, embeddings)
+            # vector_store = FAISS.from_documents(documents, embeddings)
+            vector_store = FAISS(FAISS.new_index(embeddings.embed_query("dummy")))
+            add_documents_in_batches(vector_store, documents, embeddings, batch_size=10)
+
             vector_store.save_local(faiss_folder)
             print("Vector store rebuilt without deleted file.")
 
@@ -1577,7 +1559,37 @@ def admin_delete_file_github(filename):
                 return_source_documents=True,
                 chain_type_kwargs={"prompt": PROMPT}
             )    
-            
+
+        # 2. Hapus dari DB
+        cursor.execute("DELETE FROM knowledge_files WHERE filename = %s", (filename,))
+        conn.commit()
+        if cursor.rowcount == 0:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "File not found in database"}), 404
+
+        # 3. Hapus dari GitHub
+        token = os.getenv("GITHUB_TOKEN")
+        repo = os.getenv("GITHUB_REPO")
+        github_path = os.getenv("GITHUB_FOLDER_PATH")
+        github_api_url = f"https://api.github.com/repos/{repo}/contents/{github_path}/{filename}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json"
+        }
+
+        get_response = requests.get(github_api_url, headers=headers)
+        if get_response.status_code == 200:
+            sha = get_response.json().get("sha")
+            delete_response = requests.delete(github_api_url, headers=headers, json={
+                "message": f"Delete {filename}",
+                "sha": sha,
+            })
+            if delete_response.status_code not in [200, 204]:
+                print(f"GitHub deletion failed: {delete_response.text}")
+        else:
+            print(f"GitHub file not found: {get_response.text}")
+
 
         # documents = process_documents_from_uploads_github()
         # vector_store_initialized = initialize_vector_store()
