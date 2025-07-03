@@ -398,6 +398,9 @@ def initialize_vector_store():
                 print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
             except Exception as load_error:
                 print(f"Error loading FAISS index: {str(load_error)}")
+                print("Deleting corrupted index...")
+                import shutil
+                shutil.rmtree(VECTOR_STORE_FOLDER_PATH, ignore_errors=True)
                 # If loading fails, we'll create a new index
                 vector_store = None
 
