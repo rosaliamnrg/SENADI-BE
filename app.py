@@ -122,12 +122,15 @@ def get_db_connection():
         port=int(os.getenv('DB_PORT', os.getenv('MYSQLPORT')))
     )
 
-def extract_text_from_pdf(pdf_bytes: bytes, filename: str = "uploaded.pdf", batch_size: int = 50, start_page: int = 0, max_pages: int = None) -> List[Document]:
+def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> List[Document]:
     """
     Extract text from PDF bytes and return list of Document objects with splitting.
     Each page is extracted and split into chunks using RecursiveCharacterTextSplitter.
     """
     documents = []
+    # batch_size = 50
+    start_page = 0
+    max_pages = None
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         total_pages = len(doc)
@@ -263,7 +266,7 @@ def process_documents_from_uploads(deleted_filename = None):
             print(f"Processing PDF: {filename} (max {max_pages} pages)")
             
             try:
-                docs = extract_text_from_pdf(filepath, max_pages)
+                docs = extract_text_from_pdf(filepath, filename)
                 documents.append(docs)
             except Exception as e:
                 print(f"Error processing PDF {filename}: {str(e)}")
@@ -351,7 +354,7 @@ def process_documents_from_uploads_github(deleted_filename = None):
                 docs = extract_data_from_excel(file_content.content)
                 documents.extend(docs)
             elif name.lower().endswith('.pdf'):
-                docs = extract_text_from_pdf(file_content.content)
+                docs = extract_text_from_pdf(file_content.content, name)
                 documents.extend(docs)
             elif name.lower().endswith(('.txt', '.csv', '.md')):
                 text = file_content.text
@@ -365,31 +368,6 @@ def process_documents_from_uploads_github(deleted_filename = None):
     except Exception as e:
         print(traceback.format_exc())
         return documents
-
-
-def download_faiss_index_from_github():
-    # Download index.faiss and index.pkl from GitHub and save to local folder
-    token = os.getenv("GITHUB_TOKEN")
-    repo = os.getenv("GITHUB_REPO")
-    github_path = os.getenv("GITHUB_FAISS_PATH")  # e.g. "faiss/"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json"
-    }
-    
-    for filename in ["index.faiss", "index.pkl"]:
-        url = f"https://api.github.com/repos/{repo}/contents/{github_path}{filename}"
-        res = requests.get(url, headers=headers)
-        if res.status_code == 200:
-            content = base64.b64decode(res.json()["content"])
-            local_path = os.path.join(VECTOR_STORE_FOLDER_PATH, filename)
-            with open(local_path, "wb") as f:
-                f.write(content)
-            print(f"Downloaded {filename} from GitHub")
-        else:
-            print(f"Failed to download {filename} from GitHub: {res.text}")
-            return False
-    return True
 
 def initialize_vector_store():
     """Initialize or load the vector store with documents from uploads"""
@@ -406,10 +384,6 @@ def initialize_vector_store():
                 print("Successfully loaded FAISS index with GoogleGenerativeAIEmbeddings")
             except Exception as load_error:
                 print(f"Error loading FAISS index: {str(load_error)}")
-                # print("Deleting corrupted index...")
-                # import shutil
-                # shutil.rmtree(VECTOR_STORE_FOLDER_PATH, ignore_errors=True)
-                # If loading fails, we'll create a new index
                 vector_store = None
 
         # If vector store couldn't be loaded or doesn't exist, create a new one
@@ -1768,7 +1742,7 @@ def upload_file_github():
         # 4. Ekstraksi konten
         try:
             if file_type == 'pdf':
-                content = extract_text_from_pdf(file_bytes)
+                content = extract_text_from_pdf(file_bytes, filename)
             elif file_type == 'excel':
                 content = extract_data_from_excel(BytesIO(file_bytes))  # list of Documents
             elif file_type in ['csv', 'text']:
@@ -1799,7 +1773,29 @@ def upload_file_github():
 
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
                 PROMPT = PromptTemplate(
-                    template="""... (prompt seperti sebelumnya) ...""",
+                    template="""
+                        Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+
+                        Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
+
+                        Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+
+                        Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+
+                        Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+                        **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
+
+                        JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+
+                        Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
+
+                        Konteks:
+                        {context}
+                        
+                        Pertanyaan: {question}
+                        
+                        Jawaban yang informatif, lengkap, dan presisi:
+                    """,
                     input_variables=["context", "question"]
                 )
                 llm = ChatGoogleGenerativeAI(
@@ -1931,7 +1927,7 @@ def upload_file():
         content = None
         try:
             if file_type == 'pdf':
-                content = extract_text_from_pdf(file_path)
+                content = extract_text_from_pdf(file_path, secure_name)
             elif file_type == 'excel':
                 excel_data = extract_data_from_excel(file_path)
                 content = json.dumps(excel_data, ensure_ascii=False, default=str)
