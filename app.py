@@ -18,7 +18,6 @@ import random
 import base64
 import requests
 from io import BytesIO
-import pdfplumber
 import fitz
 from typing import List
 
