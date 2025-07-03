@@ -1459,7 +1459,7 @@ def admin_delete_file(filename):
         print(e)
         return jsonify({"error": str(e)}), 500
 
-def add_documents_in_batches(vector_store, documents: List[Document], embeddings, batch_size: int = 10):
+def add_documents_in_batches(documents: List[Document], embeddings, batch_size: int = 10):
     for i in range(0, len(documents), batch_size):
         batch = documents[i:i + batch_size]
         try:
@@ -1517,8 +1517,7 @@ def admin_delete_file_github(filename):
                 google_api_key=GOOGLE_API_KEY
             )
             # vector_store = FAISS.from_documents(documents, embeddings)
-            vector_store = FAISS(FAISS.new_index(embeddings.embed_query("dummy")))
-            add_documents_in_batches(vector_store, documents, embeddings, batch_size=10)
+            add_documents_in_batches(documents, embeddings, batch_size=10)
 
             vector_store.save_local(faiss_folder)
             print("Vector store rebuilt without deleted file.")
