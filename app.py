@@ -485,35 +485,46 @@ def initialize_vector_store_qdrant():
         )
 
         collection_name = os.getenv("QDRANT_COLLECTION")
-
-        # 2. Pastikan koleksi ada
-        if not qdrant_client.collection_exists(collection_name=collection_name):
-            qdrant_client.recreate_collection(
-                collection_name=collection_name,
-                vectors_config=VectorParams(size=768, distance=Distance.COSINE)  # 768 untuk Google text-embedding-004
-            )
-
-        # 3. Ambil dokumen
-        documents = process_documents_from_uploads_github()
-        if not documents:
-            print("No documents to embed.")
-            return False
-
-        # 4. Buat embeddings
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/text-embedding-004",
             google_api_key=GOOGLE_API_KEY
         )
 
-        # 5. Masukkan ke Qdrant
-        vector_store = QdrantVectorStore.from_documents(
-            documents,
-            embeddings,
-            url=os.getenv("QDRANT_URL"),
-            collection_name=collection_name,
-            api_key=os.getenv("QDRANT_API_KEY"),
-            prefer_grpc=True
-        )
+
+        # 2. Pastikan koleksi ada
+        existing_collections = [col.name for col in qdrant_client.get_collections().collections]
+        if collection_name not in existing_collections:
+            print(f"[Qdrant] Collection '{collection_name}' not found. Creating...")
+            qdrant_client.recreate_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=768, distance=Distance.COSINE)
+            )
+
+            # Kalau baru dibuat, kita perlu upload dokumen
+            documents = process_documents_from_uploads_github()
+            if not documents:
+                print("No documents to embed.")
+                return False
+
+            vector_store = QdrantVectorStore.from_documents(
+                documents=documents,
+                embedding=embeddings,
+                url=os.getenv("QDRANT_URL"),
+                api_key=os.getenv("QDRANT_API_KEY"),
+                collection_name=collection_name,
+                prefer_grpc=True
+            )
+            print("[Qdrant] Uploaded new documents.")
+        else:
+            print(f"[Qdrant] Collection '{collection_name}' exists. Using existing vectors.")
+            vector_store = QdrantVectorStore(
+                client=qdrant_client,
+                collection_name=collection_name,
+                embeddings=embeddings
+            )
+        # 4. Buat embeddings
+        
+        
         print("Successfully uploaded vectors to Qdrant.")
 
         # 6. QA Chain
