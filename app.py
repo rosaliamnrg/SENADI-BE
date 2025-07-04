@@ -517,10 +517,10 @@ def initialize_vector_store_qdrant():
             print("[Qdrant] Uploaded new documents.")
         else:
             print(f"[Qdrant] Collection '{collection_name}' exists. Using existing vectors.")
-            vector_store = QdrantVectorStore(
-                client=qdrant_client,
+            vector_store = QdrantVectorStore.from_existing_collection(
+                url=os.getenv("QDRANT_URL"),
                 collection_name=collection_name,
-                embeddings=embeddings
+                embedding=embeddings
             )
         # 4. Buat embeddings
         
