@@ -19,3 +19,4 @@ openpyxl
 gunicorn
 PyMuPDF
 qdrant-client
+grpcio-tools 

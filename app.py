@@ -126,6 +126,16 @@ def get_db_connection():
         port=int(os.getenv('DB_PORT', os.getenv('MYSQLPORT')))
     )
 
+def add_documents_in_batches(documents: List[Document], embeddings, batch_size: int = 10):
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i:i + batch_size]
+        try:
+            vector_store_batch = FAISS.from_documents(batch, embeddings)
+            vector_store.merge_from(vector_store_batch)
+        except Exception as e:
+            print(f"[Batch error] {str(e)}")
+
+
 def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> List[Document]:
     """
     Extract text from PDF bytes and return list of Document objects with splitting.
@@ -184,8 +194,6 @@ def extract_data_from_excel(excel_path):
         # Process each sheet
         text_content = []
         for sheet_name, df in excel_data.items():
-            sheet_text = f"Sheet: {sheet_name}\n"
-            
             # Handle Q&A format specifically (looking for columns like question/answer, q/a, etc)
             question_cols = [col for col in df.columns if any(q in str(col).lower() for q in ['Permasalahan'])]
             answer_cols = [col for col in df.columns if any(a in str(col).lower() for a in ['Solusi'])]
@@ -197,10 +205,10 @@ def extract_data_from_excel(excel_path):
                         for a_col in answer_cols:
                             if pd.notna(row[q_col]) and pd.notna(row[a_col]):
                                 # Create a document for each Q&A pair
-                                qa_text = f"Q: {row[q_col]}\nA: {row[a_col]}"
+                                qa_text = f"Permasalahan: {row[q_col]}\nJawaban: {row[a_col]}"
                                 text_content.append(Document(
                                     page_content=qa_text,
-                                    metadata={"source": f"{os.path.basename(excel_path)}:{sheet_name}", "type": "qa"}
+                                    metadata={"source": f"{os.path.basename(BytesIO(excel_path))}:{sheet_name} row: {i}", "type": "qa"}
                                 ))
             else:
                 # Convert each row to a document
@@ -209,7 +217,7 @@ def extract_data_from_excel(excel_path):
                     if row_text:
                         text_content.append(Document(
                             page_content=row_text,
-                            metadata={"source": f"{os.path.basename(excel_path)}:{sheet_name}", "row": i, "type": "data"}
+                            metadata={"source": f"{os.path.basename(BytesIO(excel_path))}:{sheet_name} row: {i}", "type": "data"}
                         ))
         
         return text_content
@@ -480,7 +488,7 @@ def initialize_vector_store_qdrant():
             api_key=os.getenv("QDRANT_API_KEY")
         )
 
-        collection_name = "senadi"
+        collection_name = os.getenv("QDRANT_COLLECTION")
 
         # 2. Pastikan koleksi ada
         if not qdrant_client.collection_exists(collection_name=collection_name):
@@ -1529,23 +1537,15 @@ def admin_delete_file(filename):
         print(e)
         return jsonify({"error": str(e)}), 500
 
-def add_documents_in_batches(documents: List[Document], embeddings, batch_size: int = 10):
-    for i in range(0, len(documents), batch_size):
-        batch = documents[i:i + batch_size]
-        try:
-            vector_store_batch = FAISS.from_documents(batch, embeddings)
-            vector_store.merge_from(vector_store_batch)
-        except Exception as e:
-            print(f"[Batch error] {str(e)}")
-
 @app.route('/admin/delete_github/<path:filename>', methods=['GET'])
 @jwt_required()
 def admin_delete_file_github(filename):
-    global vector_store, qa_chain
+    global qa_chain, vector_store
+
     try:
         current_user = get_jwt_identity()
 
-        # 1. Cek admin
+        # 1. Cek apakah user admin
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT role FROM users WHERE id = %s", (current_user,))
@@ -1556,80 +1556,29 @@ def admin_delete_file_github(filename):
             conn.close()
             return jsonify({"error": "Admin access required"}), 403
 
-        # 4. Hapus dokumen terkait dari vector store
-        if vector_store is None:
-            return jsonify({"error": "Vector store not initialized"}), 500
+        # 2. Hapus dari Qdrant berdasarkan metadata source
+        qdrant_client = QdrantClient(
+            url=os.getenv("QDRANT_HOST", "http://localhost:6333"),
+            api_key=os.getenv("QDRANT_API_KEY")
+        )
+        collection_name = os.getenv("QDRANT_COLLECTION", "susenas_vectors")
 
-        print(f"Filtering out documents with source: {filename}")
+        delete_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="source",
+                    match=MatchValue(value=filename)
+                )
+            ]
+        )
 
-        # Periksa apakah file FAISS ada, lalu hapus
-        faiss_folder = os.getenv("VECTOR_STORE_FOLDER_PATH")
-        faiss_index_file = os.path.join(faiss_folder, "index.faiss")
-        faiss_pkl_file = os.path.join(faiss_folder, "index.pkl")
+        qdrant_client.delete(
+            collection_name=collection_name,
+            filter=delete_filter
+        )
+        print(f"[Qdrant] Deleted vectors where source == '{filename}'")
 
-        for path in [faiss_index_file, faiss_pkl_file]:
-            if os.path.exists(path):
-                os.remove(path)
-                print(f"Deleted FAISS file: {path}")
-            else:
-                print(f"File not found: {path}")
-            
-        documents = process_documents_from_uploads_github(deleted_filename = filename)
-        
-        if not documents:
-            vector_store = None
-            qa_chain = None
-            print("No documents left after deletion.")
-        else:
-            # Bangun FAISS baru
-            embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/text-embedding-004",
-                google_api_key=GOOGLE_API_KEY
-            )
-            # vector_store = FAISS.from_documents(documents, embeddings)
-            add_documents_in_batches(documents, embeddings, batch_size=10)
-
-            vector_store.save_local(faiss_folder)
-            print("Vector store rebuilt without deleted file.")
-
-            retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
-            PROMPT = PromptTemplate(
-                template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
-
-               Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
-
-                Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
-
-                Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
-
-                Jika informasi tidak tersedia dalam konteks, katakan secara formal:
-                **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
-
-                JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
-
-                Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
-
-                {context}
-
-                Pertanyaan: {question}
-
-                Jawaban yang akurat dan relevan:""",
-                input_variables=["context", "question"]
-            )
-            llm = ChatGoogleGenerativeAI(
-                model=MODEL_NAME,
-                google_api_key=GOOGLE_API_KEY,
-                temperature=0.2
-            )
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type="stuff",
-                retriever=retriever,
-                return_source_documents=True,
-                chain_type_kwargs={"prompt": PROMPT}
-            )    
-
-        # 2. Hapus dari DB
+        # 3. Hapus dari database
         cursor.execute("DELETE FROM knowledge_files WHERE filename = %s", (filename,))
         conn.commit()
         if cursor.rowcount == 0:
@@ -1637,7 +1586,7 @@ def admin_delete_file_github(filename):
             conn.close()
             return jsonify({"error": "File not found in database"}), 404
 
-        # 3. Hapus dari GitHub
+        # 4. Hapus dari GitHub
         token = os.getenv("GITHUB_TOKEN")
         repo = os.getenv("GITHUB_REPO")
         github_path = os.getenv("GITHUB_FOLDER_PATH")
@@ -1655,56 +1604,29 @@ def admin_delete_file_github(filename):
                 "sha": sha,
             })
             if delete_response.status_code not in [200, 204]:
-                print(f"GitHub deletion failed: {delete_response.text}")
+                print(f"[GitHub] Failed to delete: {delete_response.text}")
         else:
-            print(f"GitHub file not found: {get_response.text}")
-
-
-        # documents = process_documents_from_uploads_github()
-        # vector_store_initialized = initialize_vector_store()
-        # if(not vector_store_initialized):
-        #     return
-        # # Rebuild vector store tanpa dokumen yang dihapus
-        # if vector_store_initialized:
-        #     vector_store.add_documents(documents)
-        #     vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
-        #     print(f"Vector store updated and saved without {filename}")
-        # else:
-        #     return
-
-        # Update retriever dan chain
-        # retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
-        # PROMPT = PromptTemplate(
-        #     template="""Anda adalah asisten virtual Susenas dari BPS. Jawablah pertanyaan pengguna dengan akurat berdasarkan dokumen berikut.
-
-        #     {context}
-
-        #     Pertanyaan: {question}
-
-        #     Jawaban yang akurat dan relevan:""",
-        #     input_variables=["context", "question"],
-        # )
-        # llm = ChatGoogleGenerativeAI(
-        #     model=MODEL_NAME,
-        #     google_api_key=GOOGLE_API_KEY,
-        #     temperature=0.2
-        # )
-        # qa_chain = RetrievalQA.from_chain_type(
-        #     llm=llm,
-        #     chain_type="stuff",
-        #     retriever=retriever,
-        #     return_source_documents=True,
-        #     chain_type_kwargs={"prompt": PROMPT}
-        # )
+            print(f"[GitHub] File not found: {get_response.text}")
 
         cursor.close()
         conn.close()
 
+        # 5. (Opsional) Reset QA Chain
+        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",
+            retriever=retriever,
+            return_source_documents=True,
+            chain_type_kwargs={"prompt": PROMPT}
+        )
+
         return jsonify({"success": True}), 200
 
     except Exception as e:
-        print(e)
+        print(f"[ERROR] {e}")
         return jsonify({"error": str(e)}), 500
+
 
 
 @app.route('/admin/chat/<chat_id>', methods=['GET'])
@@ -1840,7 +1762,7 @@ def upload_file_github():
             if file_type == 'pdf':
                 new_documents = content
             elif file_type == 'excel':
-                new_documents = content  # hasil dari extract_data_from_excel sudah berupa Document list
+                new_documents = content  # sudah berupa list of Document
             elif file_type in ['csv', 'text']:
                 chunks = text_splitter.split_text(content)
                 new_documents = [
@@ -1849,10 +1771,39 @@ def upload_file_github():
                 ]
 
             if new_documents:
-                vector_store.add_documents(new_documents)
-                vector_store.save_local(VECTOR_STORE_FOLDER_PATH)
+                # Inisialisasi embedding
+                embeddings = GoogleGenerativeAIEmbeddings(
+                    model="models/text-embedding-004",
+                    google_api_key=GOOGLE_API_KEY
+                )
+
+                # Inisialisasi Qdrant client
+                qdrant_client = QdrantClient(
+                    url=os.getenv("QDRANT_URL"),  # contoh: "http://localhost:6333"
+                    api_key=os.getenv("QDRANT_API_KEY")  # jika tidak pakai key, bisa None
+                )
+
+                # Nama collection di Qdrant
+                collection_name = os.getenv("QDRANT_COLLECTION")
+
+                # Buat collection jika belum ada
+                if collection_name not in qdrant_client.get_collections().collections:
+                    qdrant_client.recreate_collection(
+                        collection_name=collection_name,
+                        vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+                    )
+
+                # Buat vector store dari Qdrant
+                vector_store = Qdrant.from_documents(
+                    new_documents,
+                    embeddings,
+                    url=os.getenv("QDRANT_URL"),
+                    api_key=os.getenv("QDRANT_API_KEY", None),
+                    collection_name=collection_name
+                )
 
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+
                 PROMPT = PromptTemplate(
                     template="""
                         Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
@@ -1877,13 +1828,14 @@ def upload_file_github():
                         
                         Jawaban yang informatif, lengkap, dan presisi:
                     """,
-                    input_variables=["context", "question"]
-                )
+                    input_variables=["context", "question"])
+
                 llm = ChatGoogleGenerativeAI(
                     model=MODEL_NAME,
                     google_api_key=GOOGLE_API_KEY,
                     temperature=0.2
                 )
+
                 qa_chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
@@ -1893,7 +1845,7 @@ def upload_file_github():
                 )
 
         except Exception as indexing_err:
-            return jsonify({"error": f"FAISS indexing error: {str(indexing_err)}"}), 500
+            return jsonify({"error": f"Qdrant indexing error: {str(indexing_err)}"}), 500
 
 
         # 6. Upload ke GitHub
@@ -1939,8 +1891,6 @@ def upload_file_github():
             conn.commit()
         except Exception as db_err:
             return jsonify({"error": f"DB Error: {str(db_err)}"}), 500
-
-        
 
         # 9. Selesai
         cursor.close()
