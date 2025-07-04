@@ -19,4 +19,4 @@ openpyxl
 gunicorn
 PyMuPDF
 qdrant-client
-grpcio-tools 
+grpcio-tools==1.59.0 --only-binary :all:
