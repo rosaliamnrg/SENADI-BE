@@ -1594,7 +1594,7 @@ def admin_delete_file_github(filename):
 
         qdrant_client.delete(
             collection_name=collection_name,
-            filter=delete_filter
+            points_selector=delete_filter
         )
         print(f"[Qdrant] Deleted vectors where source == '{filename}'")
 
