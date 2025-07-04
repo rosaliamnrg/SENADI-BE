@@ -516,6 +516,12 @@ def initialize_vector_store_qdrant():
                 retrieval_mode=RetrievalMode.DENSE,
                 vector_name="dense",
             )
+            
+            print("Memproses dokumen dari Github")
+            documents = process_documents_from_uploads_github()
+            vector_store.add_documents(documents)
+            print("Berhasil menyimpan dokumen Github ke Qdrant")
+
         else:
             print(f"[Qdrant] Collection {collection_name} already exist. Loading collection")
             
