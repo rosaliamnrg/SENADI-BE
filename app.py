@@ -35,7 +35,7 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_core.documents import Document
 from langchain_community.docstore.in_memory import InMemoryDocstore
 
-from langchain_qdrant import QdrantVectorStore
+from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
@@ -483,7 +483,7 @@ def initialize_vector_store_qdrant():
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY"),
             prefer_grpc=False,
-            timeout=30.0
+            timeout=60
         )
         collection_name = os.getenv("QDRANT_COLLECTION")
 
@@ -493,10 +493,7 @@ def initialize_vector_store_qdrant():
         )
 
         # Cek apakah collection sudah ada
-        existing_collections = [col.name for col in qdrant_client.get_collections().collections]
-
-        is_new_collection = collection_name not in existing_collections
-        if is_new_collection:
+        if not qdrant_client.collection_exists(collection_name):
             print(f"[Qdrant] Collection '{collection_name}' not found. Creating...")
             qdrant_client.create_collection(
                 collection_name=collection_name,
@@ -511,36 +508,23 @@ def initialize_vector_store_qdrant():
                 )
             except Exception as e:
                 print(f"[Qdrant] Payload index error: {e}")
-
-        # Cek apakah collection kosong
-        vector_count = qdrant_client.count(collection_name=collection_name).count
-        if vector_count == 0:
-            print("[Qdrant] Collection is empty. Uploading documents...")
-            documents = process_documents_from_uploads_github()
-            if not documents:
-                print("No documents to embed.")
-                return False
-
-            vector_store = QdrantVectorStore.from_documents(
-                documents=documents,
-                embedding=embeddings,
-                url=os.getenv("QDRANT_URL"),
-                api_key=os.getenv("QDRANT_API_KEY"),
+            
+            vector_store = QdrantVectorStore(
+                client=qdrant_client,
                 collection_name=collection_name,
-                timeout=300,
-                batch_size=64,
-                prefer_grpc=False
+                embedding=embeddings,
+                retrieval_mode=RetrievalMode.DENSE,
+                vector_name="dense",
             )
-            print("[Qdrant] Documents uploaded to collection.")
         else:
-            print(f"[Qdrant] Collection '{collection_name}' exists with {vector_count} vectors.")
-            vector_store = QdrantVectorStore.from_existing_collection(
-                url=os.getenv("QDRANT_URL"),
+            print(f"[Qdrant] Collection {collection_name} already exist. Loading collection")
+            
+            vector_store = QdrantVectorStore(
+                client=qdrant_client,
                 collection_name=collection_name,
                 embedding=embeddings,
-                api_key=os.getenv("QDRANT_API_KEY"),
-                prefer_grpc=False,
-                timeout=30.0
+                retrieval_mode=RetrievalMode.DENSE,
+                vector_name="dense",
             )
 
         # QA Chain
@@ -1603,7 +1587,8 @@ def admin_delete_file_github(filename):
         # 2. Hapus dari Qdrant berdasarkan metadata source
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
-            api_key=os.getenv("QDRANT_API_KEY")
+            api_key=os.getenv("QDRANT_API_KEY"),
+            timeout = 60
         )
         collection_name = os.getenv("QDRANT_COLLECTION")
 
