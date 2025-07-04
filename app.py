@@ -1637,7 +1637,7 @@ def admin_delete_file_github(filename):
                 Jawaban yang akurat dan relevan:""",
                 input_variables=["context", "question"]
             )
-            llm = ChatGoogleGenerativeAI(
+        llm = ChatGoogleGenerativeAI(
                 model=MODEL_NAME,
                 google_api_key=GOOGLE_API_KEY,
                 temperature=0.2
