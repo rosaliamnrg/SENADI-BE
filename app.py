@@ -1871,13 +1871,14 @@ def upload_file_github():
                 # Nama collection di Qdrant
                 collection_name = os.getenv("QDRANT_COLLECTION")
 
-                # Buat collection jika belum ada
-                existing = [col.name for col in qdrant_client.get_collections().collections]
-                if collection_name not in existing:
-                    qdrant_client.create_collection(
-                        collection_name=collection_name,
-                        vectors_config=VectorParams(size=768, distance=Distance.COSINE),
-                    )
+                vector_store = QdrantVectorStore.from_existing_collection(
+                    url=os.getenv("QDRANT_URL"),
+                    collection_name=collection_name,
+                    embedding=embeddings,
+                    api_key=os.getenv("QDRANT_API_KEY"),
+                    prefer_grpc=False,
+                    timeout=30.0
+                )
 
                 if vector_store:
                     # Buat vector store dari Qdrant
