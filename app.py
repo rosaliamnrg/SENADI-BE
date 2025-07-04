@@ -35,11 +35,10 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_core.documents import Document
 from langchain_community.docstore.in_memory import InMemoryDocstore
 
-from langchain_community.vectorstores import Qdrant
 from langchain_qdrant import QdrantVectorStore
-from qdrant_client import QdrantClient, models
+from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
-from qdrant_client.models import Filter, FieldCondition, MatchValue
+from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
 
 # Load environment variables
 load_dotenv()
@@ -543,15 +542,15 @@ def initialize_vector_store_qdrant():
         # 4. Buat embeddings
         
         # Selalu buat index 'source' meskipun koleksi sudah ada
-        try:
-            qdrant_client.create_payload_index(
-                collection_name=collection_name,
-                field_name="source",
-                field_schema="keyword"
-            )
-        except Exception as e:
-            print(f"[Qdrant] Payload index already exists or failed to create: {e}")
-        print("Successfully uploaded vectors to Qdrant.")
+        # try:
+        #     qdrant_client.create_payload_index(
+        #         collection_name=collection_name,
+        #         field_name="source",
+        #         field_schema="keyword"
+        #     )
+        # except Exception as e:
+        #     print(f"[Qdrant] Payload index already exists or failed to create: {e}")
+        # print("Successfully uploaded vectors to Qdrant.")
 
         # 6. QA Chain
         retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
@@ -1621,13 +1620,15 @@ def admin_delete_file_github(filename):
         )
         collection_name = os.getenv("QDRANT_COLLECTION")
 
-        delete_filter = Filter(
+        delete_filter = FilterSelector(
+            filter = Filter(
             must=[
-                FieldCondition(
-                    key="source",
-                    match=MatchValue(value=filename)
-                )
-            ]
+                    FieldCondition(
+                        key="source",
+                        match=MatchValue(value=filename)
+                    )
+                ]
+            )
         )
 
         qdrant_client.delete(
