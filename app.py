@@ -36,7 +36,7 @@ from langchain_community.docstore.in_memory import InMemoryDocstore
 
 from langchain_community.vectorstores import Qdrant
 from langchain_qdrant import QdrantVectorStore
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import Distance, VectorParams
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
@@ -480,9 +480,7 @@ def initialize_vector_store_qdrant():
     try:
         # 1. Buat koneksi ke Qdrant
         qdrant_client = QdrantClient(
-            url=os.getenv("QDRANT_URL"),  # Ganti sesuai dengan environment Railway Anda
-            api_key=os.getenv("QDRANT_API_KEY"),
-            prefer_grpc=False
+            url=os.getenv("QDRANT_URL"),
         )
 
         collection_name = os.getenv("QDRANT_COLLECTION")
@@ -491,14 +489,14 @@ def initialize_vector_store_qdrant():
             google_api_key=GOOGLE_API_KEY
         )
 
-
         # 2. Pastikan koleksi ada
         existing_collections = [col.name for col in qdrant_client.get_collections().collections]
         if collection_name not in existing_collections:
             print(f"[Qdrant] Collection '{collection_name}' not found. Creating...")
-            qdrant_client.recreate_collection(
+            qdrant_client.create_collection(
                 collection_name=collection_name,
-                vectors_config=VectorParams(size=768, distance=Distance.COSINE)
+                vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+                init_from=models.InitFrom(collection="{from_collection_name}"),
             )
 
             # Kalau baru dibuat, kita perlu upload dokumen
@@ -513,6 +511,8 @@ def initialize_vector_store_qdrant():
                 url=os.getenv("QDRANT_URL"),
                 api_key=os.getenv("QDRANT_API_KEY"),
                 collection_name=collection_name,
+                timeout=300,
+                batch_size=64,
                 prefer_grpc=False
             )
             print("[Qdrant] Uploaded new documents.")
@@ -1861,6 +1861,9 @@ def upload_file_github():
                     url=os.getenv("QDRANT_URL"),
                     api_key=os.getenv("QDRANT_API_KEY"),
                     collection_name=collection_name,
+                    timeout=300,
+                    batch_size=64,
+                    prefer_grpc=False
                 )
 
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
