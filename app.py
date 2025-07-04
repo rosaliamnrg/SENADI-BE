@@ -20,6 +20,7 @@ import requests
 from io import BytesIO
 import fitz
 from typing import List
+from uuid import uuid4
 
 # LangChain imports
 from langchain.chains import RetrievalQA
@@ -168,7 +169,8 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> List[Document]:
                                     "source": filename,
                                     "page": i + 1,
                                     "chunk": j,
-                                    "type": "pdf"
+                                    "type": "pdf",
+                                    "id": str(uuid4())
                                 }
                             )
                         )
@@ -204,7 +206,7 @@ def extract_data_from_excel(excel_content, filename="unknown.xlsx"):
                                 qa_text = f"Permasalahan: {row[q_col]}\nJawaban: {row[a_col]}"
                                 text_content.append(Document(
                                     page_content=qa_text,
-                                    metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "qa"}
+                                    metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "qa", "id": str(uuid4())}
                                 ))
             else:
                 for i, row in df.iterrows():
@@ -1870,32 +1872,17 @@ def upload_file_github():
                 collection_name = os.getenv("QDRANT_COLLECTION")
 
                 # Buat collection jika belum ada
-                if collection_name not in qdrant_client.get_collections().collections:
-                    qdrant_client.recreate_collection(
+                existing = [col.name for col in qdrant_client.get_collections().collections]
+                if collection_name not in existing:
+                    qdrant_client.create_collection(
                         collection_name=collection_name,
                         vectors_config=VectorParams(size=768, distance=Distance.COSINE),
                     )
 
-                # Buat vector store dari Qdrant
-                vector_store = QdrantVectorStore.from_documents(
-                    new_documents,
-                    embeddings,
-                    url=os.getenv("QDRANT_URL"),
-                    api_key=os.getenv("QDRANT_API_KEY"),
-                    collection_name=collection_name,
-                    timeout=300,
-                    batch_size=64,
-                    prefer_grpc=False
-                )
-                try:
-                    qdrant_client.create_payload_index(
-                        collection_name=collection_name,
-                        field_name="source",
-                        field_schema="keyword"
-                    )
-                except Exception as e:
-                    print(f"[Qdrant] Payload index already exists or failed to create: {e}")
-                print("Successfully uploaded vectors to Qdrant.")
+                if vector_store:
+                    # Buat vector store dari Qdrant
+                    vector_store.add_documents(new_documents)
+                    
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
 
                 PROMPT = PromptTemplate(
