@@ -485,6 +485,16 @@ def initialize_vector_store_qdrant():
             prefer_grpc=False,
             timeout=30.0  # tambah timeout jika perlu
         )
+        collection_name = os.getenv("QDRANT_COLLECTION")
+
+        try:
+            qdrant_client.create_payload_index(
+                collection_name=collection_name,
+                field_name="source",
+                field_schema="keyword"
+            )
+        except Exception as e:
+            print(f"[Qdrant] Payload index already exists or failed to create: {e}")
 
 
         response = requests.get(
@@ -495,7 +505,6 @@ def initialize_vector_store_qdrant():
         print(response.status_code)
         print(response.text)
 
-        collection_name = os.getenv("QDRANT_COLLECTION")
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/text-embedding-004",
             google_api_key=GOOGLE_API_KEY
