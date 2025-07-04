@@ -479,12 +479,11 @@ def initialize_vector_store_qdrant():
     global vector_store, qa_chain
 
     try:
-        # 1. Buat koneksi ke Qdrant
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY"),
             prefer_grpc=False,
-            timeout=30.0  # tambah timeout jika perlu
+            timeout=30.0
         )
         collection_name = os.getenv("QDRANT_COLLECTION")
 
@@ -493,11 +492,12 @@ def initialize_vector_store_qdrant():
             google_api_key=GOOGLE_API_KEY
         )
 
-        # 2. Pastikan koleksi ada
+        # Cek apakah collection sudah ada
         existing_collections = [col.name for col in qdrant_client.get_collections().collections]
-        if collection_name not in existing_collections:
-            print(f"[Qdrant] Collection '{collection_name}' not found. Creating...")
 
+        is_new_collection = collection_name not in existing_collections
+        if is_new_collection:
+            print(f"[Qdrant] Collection '{collection_name}' not found. Creating...")
             qdrant_client.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=768, distance=Distance.COSINE),
@@ -510,9 +510,12 @@ def initialize_vector_store_qdrant():
                     field_schema="keyword"
                 )
             except Exception as e:
-                print(f"[Qdrant] Payload index already exists or failed to create: {e}")
+                print(f"[Qdrant] Payload index error: {e}")
 
-            # Kalau baru dibuat, kita perlu upload dokumen
+        # Cek apakah collection kosong
+        vector_count = qdrant_client.count(collection_name=collection_name).count
+        if vector_count == 0:
+            print("[Qdrant] Collection is empty. Uploading documents...")
             documents = process_documents_from_uploads_github()
             if not documents:
                 print("No documents to embed.")
@@ -528,57 +531,22 @@ def initialize_vector_store_qdrant():
                 batch_size=64,
                 prefer_grpc=False
             )
-            print("[Qdrant] Uploaded new documents.")
-        else :
-            print(f"[Qdrant] Collection '{collection_name}' exists. Using existing vectors.")
+            print("[Qdrant] Documents uploaded to collection.")
+        else:
+            print(f"[Qdrant] Collection '{collection_name}' exists with {vector_count} vectors.")
             vector_store = QdrantVectorStore.from_existing_collection(
                 url=os.getenv("QDRANT_URL"),
                 collection_name=collection_name,
                 embedding=embeddings,
-                api_key=os.getenv("QDRANT_API_KEY"),  # <-- penting
+                api_key=os.getenv("QDRANT_API_KEY"),
                 prefer_grpc=False,
-                timeout=30.0  # <-- lebih lama
+                timeout=30.0
             )
-        # 4. Buat embeddings
-        
-        # Selalu buat index 'source' meskipun koleksi sudah ada
-        # try:
-        #     qdrant_client.create_payload_index(
-        #         collection_name=collection_name,
-        #         field_name="source",
-        #         field_schema="keyword"
-        #     )
-        # except Exception as e:
-        #     print(f"[Qdrant] Payload index already exists or failed to create: {e}")
-        # print("Successfully uploaded vectors to Qdrant.")
 
-        # 6. QA Chain
+        # QA Chain
         retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
-
         PROMPT = PromptTemplate(
-            template="""
-            Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
-
-            Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
-
-            Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
-
-            Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
-
-            Jika informasi tidak tersedia dalam konteks, katakan secara formal:
-            **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
-
-            JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
-
-            Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
-
-            Konteks:
-            {context}
-            
-            Pertanyaan: {question}
-            
-            Jawaban yang informatif, lengkap, dan presisi:
-            """,
+            template="""[... PROMPT SAMA SEPERTI KAMU ...]""",
             input_variables=["context", "question"]
         )
 
