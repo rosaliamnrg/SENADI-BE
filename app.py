@@ -1554,7 +1554,7 @@ def admin_delete_file_github(filename):
 
         # 2. Hapus dari Qdrant berdasarkan metadata source
         qdrant_client = QdrantClient(
-            url=os.getenv("QDRANT_HOST"),
+            url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY")
         )
         collection_name = os.getenv("QDRANT_COLLECTION", "susenas_vectors")
