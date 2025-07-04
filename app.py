@@ -497,7 +497,7 @@ def initialize_vector_store_qdrant():
             print(f"[Qdrant] Collection '{collection_name}' not found. Creating...")
             qdrant_client.create_collection(
                 collection_name=collection_name,
-                vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+                vectors_config={"dense" : VectorParams(size=768, distance=Distance.COSINE)},
             )
 
             try:
