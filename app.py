@@ -1669,44 +1669,44 @@ def admin_delete_file_github(filename):
         conn.close()
 
         # 5. (Opsional) Reset QA Chain
-        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+        # retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
 
-        PROMPT = PromptTemplate(
-                template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+        # PROMPT = PromptTemplate(
+        #         template="""Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
-               Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
+        #        Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
 
-                Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+        #         Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
 
-                Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+        #         Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
 
-                Jika informasi tidak tersedia dalam konteks, katakan secara formal:
-                **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
+        #         Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+        #         **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
 
-                JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+        #         JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
 
-                Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
+        #         Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
 
-                {context}
+        #         {context}
 
-                Pertanyaan: {question}
+        #         Pertanyaan: {question}
 
-                Jawaban yang akurat dan relevan:""",
-                input_variables=["context", "question"]
-            )
-        llm = ChatGoogleGenerativeAI(
-                model=MODEL_NAME,
-                google_api_key=GOOGLE_API_KEY,
-                temperature=0.2
-            )
+        #         Jawaban yang akurat dan relevan:""",
+        #         input_variables=["context", "question"]
+        #     )
+        # llm = ChatGoogleGenerativeAI(
+        #         model=MODEL_NAME,
+        #         google_api_key=GOOGLE_API_KEY,
+        #         temperature=0.2
+        #     )
 
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True,
-            chain_type_kwargs={"prompt": PROMPT}
-        )
+        # qa_chain = RetrievalQA.from_chain_type(
+        #     llm=llm,
+        #     chain_type="stuff",
+        #     retriever=retriever,
+        #     return_source_documents=True,
+        #     chain_type_kwargs={"prompt": PROMPT}
+        # )
 
         return jsonify({"success": True}), 200
 
@@ -1871,61 +1871,61 @@ def upload_file_github():
                 # Nama collection di Qdrant
                 collection_name = os.getenv("QDRANT_COLLECTION")
 
-                vector_store = QdrantVectorStore.from_existing_collection(
-                    url=os.getenv("QDRANT_URL"),
-                    collection_name=collection_name,
-                    embedding=embeddings,
-                    api_key=os.getenv("QDRANT_API_KEY"),
-                    prefer_grpc=False,
-                    timeout=30.0
-                )
+                # vector_store = QdrantVectorStore.from_existing_collection(
+                #     url=os.getenv("QDRANT_URL"),
+                #     collection_name=collection_name,
+                #     embedding=embeddings,
+                #     api_key=os.getenv("QDRANT_API_KEY"),
+                #     prefer_grpc=False,
+                #     timeout=30.0
+                # )
 
                 if vector_store:
                     # Buat vector store dari Qdrant
                     vector_store.add_documents(new_documents)
-                    
-                retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+                    print("Sukses menambahkan dokumen di Qdrant")
+                
+                # retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
 
-                PROMPT = PromptTemplate(
-                    template="""
-                        Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
+                # PROMPT = PromptTemplate(
+                #     template="""
+                #         Anda adalah asisten virtual khusus untuk menangani permasalahan terkait konsep, definisi, dan kasus batas Survei Sosial Ekonomi Nasional (Susenas) yang dilaksanakan oleh Badan Pusat Statistik (BPS). Bantu pengguna dengan informasi yang akurat dan detail tentang Susenas berdasarkan konteks yang diberikan.
 
-                        Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
+                #         Jangan hanya mencari jawaban yang persis sama dengan pertanyaan pengguna. Pelajari dan parafrase dokumen PDF dan Excel. Pahami bahwa kalimat dapat memiliki arti yang sama meskipun diparafrase. Gunakan pemahaman semantik untuk menemukan jawaban berdasarkan makna, bukan hanya kemiripan kata secara literal.
 
-                        Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
+                #         Jika ditemukan beberapa jawaban dari dataset atau dokumen yang berbeda, utamakan jawaban yang berasal dari **dokumen atau file terbaru** (yang memiliki waktu unggah paling baru). Tunjukkan pemahaman yang tepat terhadap konteks saat ini.
 
-                        Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
+                #         Berikan jawaban yang relevan, ringkas, dan hanya berdasarkan dokumen yang tersedia. Jangan menjawab berdasarkan asumsi atau di luar konteks.
 
-                        Jika informasi tidak tersedia dalam konteks, katakan secara formal:
-                        **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
+                #         Jika informasi tidak tersedia dalam konteks, katakan secara formal:
+                #         **"Terima kasih atas pertanyaan Anda. Saat ini informasi yang Anda cari sedang dalam proses peninjauan dan akan segera dijawab oleh instruktur. Kami menghargai kesabaran Anda dan akan memastikan bahwa pertanyaan Anda akan segera mendapatkan jawaban yang akurat."**
 
-                        JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
+                #         JANGAN pernah mengarang jawaban. Jangan gunakan tanda bintang (*) atau tanda lain yang tidak formal.
 
-                        Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
+                #         Gunakan Bahasa Indonesia yang baik dan benar. Pastikan jawaban bersifat informatif, jelas, dan tepat sasaran.
 
-                        Konteks:
-                        {context}
+                #         Konteks:
+                #         {context}
                         
-                        Pertanyaan: {question}
+                #         Pertanyaan: {question}
                         
-                        Jawaban yang informatif, lengkap, dan presisi:
-                    """,
-                    input_variables=["context", "question"])
+                #         Jawaban yang informatif, lengkap, dan presisi:
+                #     """,
+                #     input_variables=["context", "question"])
 
-                llm = ChatGoogleGenerativeAI(
-                    model=MODEL_NAME,
-                    google_api_key=GOOGLE_API_KEY,
-                    temperature=0.2
-                )
+                # llm = ChatGoogleGenerativeAI(
+                #     model=MODEL_NAME,
+                #     google_api_key=GOOGLE_API_KEY,
+                #     temperature=0.2
+                # )
 
-                qa_chain = RetrievalQA.from_chain_type(
-                    llm=llm,
-                    chain_type="stuff",
-                    retriever=retriever,
-                    return_source_documents=True,
-                    chain_type_kwargs={"prompt": PROMPT}
-                )
-
+                # qa_chain = RetrievalQA.from_chain_type(
+                #     llm=llm,
+                #     chain_type="stuff",
+                #     retriever=retriever,
+                #     return_source_documents=True,
+                #     chain_type_kwargs={"prompt": PROMPT}
+                # )
         except Exception as indexing_err:
             return jsonify({"error": f"Qdrant indexing error: {str(indexing_err)}"}), 500
 
