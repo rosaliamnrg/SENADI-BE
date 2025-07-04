@@ -36,7 +36,7 @@ from langchain_community.docstore.in_memory import InMemoryDocstore
 
 from langchain_community.vectorstores import Qdrant
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.http.models import Distance, VectorParams
 
 # Load environment variables
 load_dotenv()
@@ -514,7 +514,9 @@ def initialize_vector_store_qdrant():
             documents=documents,
             embedding=embeddings,
             client=qdrant_client,
-            collection_name=collection_name
+            collection_name=collection_name,
+            api_key=os.getenv("QDRANT_API_KEY"),
+            prefer_grpc=True
         )
         print("Successfully uploaded vectors to Qdrant.")
 
