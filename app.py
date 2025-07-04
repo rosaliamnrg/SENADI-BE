@@ -487,24 +487,6 @@ def initialize_vector_store_qdrant():
         )
         collection_name = os.getenv("QDRANT_COLLECTION")
 
-        try:
-            qdrant_client.create_payload_index(
-                collection_name=collection_name,
-                field_name="source",
-                field_schema="keyword"
-            )
-        except Exception as e:
-            print(f"[Qdrant] Payload index already exists or failed to create: {e}")
-
-
-        response = requests.get(
-            os.getenv("QDRANT_URL") + "/collections",
-            headers={"api-key": os.getenv("QDRANT_API_KEY")},
-            timeout=15
-        )
-        print(response.status_code)
-        print(response.text)
-
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/text-embedding-004",
             google_api_key=GOOGLE_API_KEY
@@ -514,10 +496,20 @@ def initialize_vector_store_qdrant():
         existing_collections = [col.name for col in qdrant_client.get_collections().collections]
         if collection_name not in existing_collections:
             print(f"[Qdrant] Collection '{collection_name}' not found. Creating...")
+
             qdrant_client.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=768, distance=Distance.COSINE),
             )
+
+            try:
+                qdrant_client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name="source",
+                    field_schema="keyword"
+                )
+            except Exception as e:
+                print(f"[Qdrant] Payload index already exists or failed to create: {e}")
 
             # Kalau baru dibuat, kita perlu upload dokumen
             documents = process_documents_from_uploads_github()
@@ -548,7 +540,15 @@ def initialize_vector_store_qdrant():
             )
         # 4. Buat embeddings
         
-        
+        # Selalu buat index 'source' meskipun koleksi sudah ada
+        try:
+            qdrant_client.create_payload_index(
+                collection_name=collection_name,
+                field_name="source",
+                field_schema="keyword"
+            )
+        except Exception as e:
+            print(f"[Qdrant] Payload index already exists or failed to create: {e}")
         print("Successfully uploaded vectors to Qdrant.")
 
         # 6. QA Chain
