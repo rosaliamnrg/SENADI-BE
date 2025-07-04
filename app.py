@@ -35,6 +35,7 @@ from langchain_core.documents import Document
 from langchain_community.docstore.in_memory import InMemoryDocstore
 
 from langchain_community.vectorstores import Qdrant
+from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 from qdrant_client.models import Filter, FieldCondition, MatchValue
@@ -505,9 +506,10 @@ def initialize_vector_store_qdrant():
         )
 
         # 5. Masukkan ke Qdrant
-        vector_store = Qdrant.from_documents(
+        vector_store = QdrantVectorStore.from_documents(
             documents,
             embeddings,
+            url=os.getenv("QDRANT_URL"),
             collection_name=collection_name,
             api_key=os.getenv("QDRANT_API_KEY"),
             prefer_grpc=True
@@ -1557,7 +1559,7 @@ def admin_delete_file_github(filename):
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY")
         )
-        collection_name = os.getenv("QDRANT_COLLECTION", "susenas_vectors")
+        collection_name = os.getenv("QDRANT_COLLECTION")
 
         delete_filter = Filter(
             must=[
@@ -1818,7 +1820,7 @@ def upload_file_github():
                     )
 
                 # Buat vector store dari Qdrant
-                vector_store = Qdrant.from_documents(
+                vector_store = QdrantVectorStore.from_documents(
                     new_documents,
                     embeddings,
                     url=os.getenv("QDRANT_URL"),

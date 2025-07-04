@@ -22,6 +22,7 @@ langchain-core
 # langchain-google-genai>=0.0.5
 langchain-google-genai
 langchain-community
+langchain-qdrant
 pydantic
 openpyxl
 gunicorn
