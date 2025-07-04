@@ -37,6 +37,7 @@ from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.vectorstores import Qdrant
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 # Load environment variables
 load_dotenv()
