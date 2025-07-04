@@ -481,7 +481,8 @@ def initialize_vector_store_qdrant():
         # 1. Buat koneksi ke Qdrant
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),  # Ganti sesuai dengan environment Railway Anda
-            api_key=os.getenv("QDRANT_API_KEY")
+            api_key=os.getenv("QDRANT_API_KEY"),
+            prefer_grpc=False
         )
 
         collection_name = os.getenv("QDRANT_COLLECTION")
