@@ -1010,6 +1010,7 @@ def create_chat():
 @app.route('/chat/<chat_id>', methods=['POST'])
 @jwt_required()
 def chat(chat_id):
+    global qa_chain
     try:
         user_id = get_jwt_identity()
         print(f"Processing chat message for user {user_id} in chat {chat_id}")
