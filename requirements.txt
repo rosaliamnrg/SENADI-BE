@@ -18,3 +18,4 @@ pydantic
 openpyxl
 gunicorn
 PyMuPDF
+qdrant-client

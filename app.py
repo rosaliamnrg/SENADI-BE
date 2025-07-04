@@ -34,6 +34,10 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_core.documents import Document
 from langchain_community.docstore.in_memory import InMemoryDocstore
 
+from langchain_community.vectorstores import Qdrant
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams
+
 # Load environment variables
 load_dotenv()
 
@@ -466,9 +470,75 @@ def initialize_vector_store():
         print(traceback.format_exc())
         return False
 
+def initialize_vector_store_qdrant():
+    global vector_store, qa_chain
+
+    try:
+        # 1. Buat koneksi ke Qdrant
+        qdrant_client = QdrantClient(
+            url=os.getenv("QDRANT_URL"),  # Ganti sesuai dengan environment Railway Anda
+            api_key=os.getenv("QDRANT_API_KEY")
+        )
+
+        collection_name = "senadi"
+
+        # 2. Pastikan koleksi ada
+        if not qdrant_client.collection_exists(collection_name=collection_name):
+            qdrant_client.recreate_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=768, distance=Distance.COSINE)  # 768 untuk Google text-embedding-004
+            )
+
+        # 3. Ambil dokumen
+        documents = process_documents_from_uploads_github()
+        if not documents:
+            print("No documents to embed.")
+            return False
+
+        # 4. Buat embeddings
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/text-embedding-004",
+            google_api_key=GOOGLE_API_KEY
+        )
+
+        # 5. Masukkan ke Qdrant
+        vector_store = Qdrant.from_documents(
+            documents=documents,
+            embedding=embeddings,
+            client=qdrant_client,
+            collection_name=collection_name
+        )
+        print("Successfully uploaded vectors to Qdrant.")
+
+        # 6. QA Chain
+        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+
+        PROMPT = PromptTemplate(
+            template="""... (template Gemini Anda tetap seperti sebelumnya) ...""",
+            input_variables=["context", "question"]
+        )
+
+        llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0.2)
+
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",
+            retriever=retriever,
+            return_source_documents=True,
+            chain_type_kwargs={"prompt": PROMPT}
+        )
+
+        print("QA chain created using Qdrant vector store.")
+        return True
+
+    except Exception as e:
+        print(f"Failed to initialize Qdrant vector store: {str(e)}")
+        traceback.print_exc()
+        return False
+
 # Initialize the vector store on startup
 print("Initializing vector store...")
-vector_store_initialized = initialize_vector_store()
+vector_store_initialized = initialize_vector_store_qdrant()
 
 # Enhanced conversation handlers
 def get_greeting_response(message):
