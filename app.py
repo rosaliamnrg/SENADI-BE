@@ -506,8 +506,8 @@ def initialize_vector_store_qdrant():
 
         # 5. Masukkan ke Qdrant
         vector_store = Qdrant.from_documents(
-            documents=documents,
-            embedding=embeddings,
+            documents,
+            embeddings,
             collection_name=collection_name,
             api_key=os.getenv("QDRANT_API_KEY"),
             prefer_grpc=True
@@ -1823,7 +1823,8 @@ def upload_file_github():
                     embeddings,
                     url=os.getenv("QDRANT_URL"),
                     api_key=os.getenv("QDRANT_API_KEY"),
-                    collection_name=collection_name
+                    collection_name=collection_name,
+                    prefer_grpc=True
                 )
 
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
