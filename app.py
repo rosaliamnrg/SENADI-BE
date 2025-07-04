@@ -514,7 +514,6 @@ def initialize_vector_store_qdrant():
         vector_store = Qdrant.from_documents(
             documents=documents,
             embedding=embeddings,
-            client=qdrant_client,
             collection_name=collection_name,
             api_key=os.getenv("QDRANT_API_KEY"),
             prefer_grpc=True
@@ -1829,7 +1828,7 @@ def upload_file_github():
                     new_documents,
                     embeddings,
                     url=os.getenv("QDRANT_URL"),
-                    api_key=os.getenv("QDRANT_API_KEY", None),
+                    api_key=os.getenv("QDRANT_API_KEY"),
                     collection_name=collection_name
                 )
 
