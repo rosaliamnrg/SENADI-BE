@@ -512,6 +512,7 @@ def initialize_vector_store_qdrant():
                 url=os.getenv("QDRANT_URL"),
                 api_key=os.getenv("QDRANT_API_KEY"),
                 collection_name=collection_name,
+                prefer_grpc=False
             )
             print("[Qdrant] Uploaded new documents.")
         else :
@@ -519,7 +520,8 @@ def initialize_vector_store_qdrant():
             vector_store = QdrantVectorStore.from_existing_collection(
                 url=os.getenv("QDRANT_URL"),
                 collection_name=collection_name,
-                embedding=embeddings
+                embedding=embeddings,
+                prefer_grpc=False
             )
         # 4. Buat embeddings
         
