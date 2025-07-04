@@ -481,7 +481,19 @@ def initialize_vector_store_qdrant():
         # 1. Buat koneksi ke Qdrant
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
+            api_key=os.getenv("QDRANT_API_KEY"),
+            prefer_grpc=False,
+            timeout=30.0  # tambah timeout jika perlu
         )
+
+
+        response = requests.get(
+            os.getenv("QDRANT_URL") + "/collections",
+            headers={"api-key": os.getenv("QDRANT_API_KEY")},
+            timeout=15
+        )
+        print(response.status_code)
+        print(response.text)
 
         collection_name = os.getenv("QDRANT_COLLECTION")
         embeddings = GoogleGenerativeAIEmbeddings(
@@ -496,7 +508,6 @@ def initialize_vector_store_qdrant():
             qdrant_client.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=768, distance=Distance.COSINE),
-                init_from=models.InitFrom(collection="{from_collection_name}"),
             )
 
             # Kalau baru dibuat, kita perlu upload dokumen
@@ -522,7 +533,9 @@ def initialize_vector_store_qdrant():
                 url=os.getenv("QDRANT_URL"),
                 collection_name=collection_name,
                 embedding=embeddings,
-                prefer_grpc=False
+                api_key=os.getenv("QDRANT_API_KEY"),  # <-- penting
+                prefer_grpc=False,
+                timeout=30.0  # <-- lebih lama
             )
         # 4. Buat embeddings
         
