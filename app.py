@@ -1887,7 +1887,15 @@ def upload_file_github():
                     batch_size=64,
                     prefer_grpc=False
                 )
-
+                try:
+                    qdrant_client.create_payload_index(
+                        collection_name=collection_name,
+                        field_name="source",
+                        field_schema="keyword"
+                    )
+                except Exception as e:
+                    print(f"[Qdrant] Payload index already exists or failed to create: {e}")
+                print("Successfully uploaded vectors to Qdrant.")
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
 
                 PROMPT = PromptTemplate(
