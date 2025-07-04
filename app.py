@@ -182,49 +182,43 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> List[Document]:
         print(f"[Fatal Error] Failed to open or parse PDF: {e}")
         return []
 
-def extract_data_from_excel(excel_path):
-    """Extract data from Excel file, handling multiple formats and sheets"""
+def extract_data_from_excel(excel_content, filename="unknown.xlsx"):
     try:
-        # print(f"Processing Excel file: {excel_path}")
-        # Read all sheets
-        if isinstance(excel_path, bytes):
-            excel_data = pd.read_excel(BytesIO(excel_path), sheet_name=None)
+        if isinstance(excel_content, bytes):
+            excel_data = pd.read_excel(BytesIO(excel_content), sheet_name=None)
         else:
-            excel_data = pd.read_excel(excel_path, sheet_name=None)
-        
-        # Process each sheet
+            excel_data = pd.read_excel(excel_content, sheet_name=None)
+
         text_content = []
         for sheet_name, df in excel_data.items():
-            # Handle Q&A format specifically (looking for columns like question/answer, q/a, etc)
             question_cols = [col for col in df.columns if any(q in str(col).lower() for q in ['Permasalahan'])]
             answer_cols = [col for col in df.columns if any(a in str(col).lower() for a in ['Solusi'])]
-            
+
             if question_cols and answer_cols:
                 print(f"  Found Q&A format in sheet {sheet_name}")
-                for _, row in df.iterrows():
+                for i, row in df.iterrows():
                     for q_col in question_cols:
                         for a_col in answer_cols:
                             if pd.notna(row[q_col]) and pd.notna(row[a_col]):
-                                # Create a document for each Q&A pair
                                 qa_text = f"Permasalahan: {row[q_col]}\nJawaban: {row[a_col]}"
                                 text_content.append(Document(
                                     page_content=qa_text,
-                                    metadata={"source": f"{os.path.basename(BytesIO(excel_path))}:{sheet_name} row: {i}", "type": "qa"}
+                                    metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "qa"}
                                 ))
             else:
-                # Convert each row to a document
                 for i, row in df.iterrows():
                     row_text = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
                     if row_text:
                         text_content.append(Document(
                             page_content=row_text,
-                            metadata={"source": f"{os.path.basename(BytesIO(excel_path))}:{sheet_name} row: {i}", "type": "data"}
+                            metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "data"}
                         ))
-        
+
         return text_content
     except Exception as e:
-        print(f"Error extracting data from Excel {excel_path}: {str(e)}")
+        print(f"Error extracting data from Excel {filename}: {str(e)}")
         return []
+
 
 def process_documents_from_uploads(deleted_filename = None):
     """Process all documents in the uploads directory and convert to Document objects"""
@@ -364,7 +358,7 @@ def process_documents_from_uploads_github(deleted_filename = None):
 
             print(f"Processing {name}")
             if name.lower().endswith(('.xlsx', '.xls')):
-                docs = extract_data_from_excel(file_content.content)
+                docs = extract_data_from_excel(file_content.content, filename=name)
                 documents.extend(docs)
             elif name.lower().endswith('.pdf'):
                 docs = extract_text_from_pdf(file_content.content, name)
@@ -1777,7 +1771,7 @@ def upload_file_github():
             if file_type == 'pdf':
                 content = extract_text_from_pdf(file_bytes, filename)
             elif file_type == 'excel':
-                content = extract_data_from_excel(BytesIO(file_bytes))  # list of Documents
+                content = extract_data_from_excel(BytesIO(file_bytes), filename)  # list of Documents
             elif file_type in ['csv', 'text']:
                 content = file_bytes.decode('utf-8')
             else:
