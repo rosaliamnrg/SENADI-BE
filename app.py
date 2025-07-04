@@ -512,10 +512,9 @@ def initialize_vector_store_qdrant():
                 url=os.getenv("QDRANT_URL"),
                 api_key=os.getenv("QDRANT_API_KEY"),
                 collection_name=collection_name,
-                prefer_grpc=True
             )
             print("[Qdrant] Uploaded new documents.")
-        else:
+        else :
             print(f"[Qdrant] Collection '{collection_name}' exists. Using existing vectors.")
             vector_store = QdrantVectorStore.from_existing_collection(
                 url=os.getenv("QDRANT_URL"),
@@ -1859,7 +1858,6 @@ def upload_file_github():
                     url=os.getenv("QDRANT_URL"),
                     api_key=os.getenv("QDRANT_API_KEY"),
                     collection_name=collection_name,
-                    prefer_grpc=True
                 )
 
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
