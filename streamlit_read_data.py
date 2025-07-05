@@ -125,7 +125,7 @@ def push_to_qdrant(documents, batch_size=10):
     try:
         client.create_payload_index(
             collection_name=QDRANT_COLLECTION,
-            field_name="file_name",
+            field_name="metadata.file_name",
             field_schema=PayloadSchemaType.KEYWORD
         )
     except Exception as e:

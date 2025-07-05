@@ -529,7 +529,7 @@ def initialize_vector_store_qdrant():
             try:
                 qdrant_client.create_payload_index(
                     collection_name=collection_name,
-                    field_name="file_name",
+                    field_name="metadata.file_name",
                     field_schema=PayloadSchemaType.KEYWORD
                 )
             except Exception as e:
@@ -1904,7 +1904,7 @@ def upload_file_github():
                     try:
                         qdrant_client.create_payload_index(
                             collection_name=collection_name,
-                            field_name="file_name",
+                            field_name="metadata.file_name",
                             field_schema=PayloadSchemaType.KEYWORD
                         )
                     except Exception as e:
