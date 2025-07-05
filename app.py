@@ -1632,15 +1632,14 @@ def admin_delete_file_github(filename):
         )
         collection_name = os.getenv("QDRANT_COLLECTION")
 
-        delete_filter = FilterSelector(
-            filter = Filter(
+        delete_filter = Filter(
             must=[
                     FieldCondition(
                         key="file_name",
                         match=MatchValue(value=filename)
                     )
                 ]
-            )
+            
         )
 
         qdrant_client.delete(
