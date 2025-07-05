@@ -475,11 +475,10 @@ def initialize_vector_store():
         print(traceback.format_exc())
         return False
 
-def initialize_vector_store_qdrant(app):
-    app.config['qa_chain'] = qa_chain
-    app.config['vector_store'] = vector_store
+@app.before_first_request
+def initialize_vector_store_qdrant():
     # global vector_store, qa_chain
-
+    print("Initializing vector store with Qdrant")
     try:
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
@@ -570,6 +569,9 @@ def initialize_vector_store_qdrant(app):
             return_source_documents=True,
             chain_type_kwargs={"prompt": PROMPT}
         )
+        
+        app.config['qa_chain'] = qa_chain
+        app.config['vector_store'] = vector_store
 
         print("QA chain created using Qdrant vector store.")
         return True
@@ -578,6 +580,10 @@ def initialize_vector_store_qdrant(app):
         print(f"Failed to initialize Qdrant vector store: {str(e)}")
         traceback.print_exc()
         return False
+
+# Initialize the vector store on startup
+# print("Initializing vector store...")
+# vector_store_initialized = initialize_vector_store_qdrant()
 
 # Enhanced conversation handlers
 def get_greeting_response(message):
@@ -2766,11 +2772,6 @@ def rebuild_knowledge():
 @app.route("/")
 def hello():
     return "Halo railway!"
-
-if __name__ == '__main__':
-    # Initialize the vector store on startup
-    print("Initializing vector store...")
-    vector_store_initialized = initialize_vector_store_qdrant(app)
 
 # if __name__ == '__main__':
 #     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
