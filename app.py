@@ -475,7 +475,7 @@ def initialize_vector_store():
         print(traceback.format_exc())
         return False
 
-@app.before_first_request
+@app.before_request
 def initialize_vector_store_qdrant():
     # global vector_store, qa_chain
     print("Initializing vector store with Qdrant")
