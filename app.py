@@ -1635,7 +1635,7 @@ def admin_delete_file_github(filename):
         delete_filter = Filter(
             must=[
                     FieldCondition(
-                        key="file_name",
+                        key="metadata.file_name",
                         match=MatchValue(value=filename)
                     )
                 ]
