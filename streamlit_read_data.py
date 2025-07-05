@@ -17,7 +17,7 @@ from langchain_qdrant import QdrantVectorStore
 load_dotenv()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 
-QDRANT_COLLECTION = "chatbot-senadi-dataset"
+QDRANT_COLLECTION = "susenas-senadi-chatbot"
 
 def extract_text_from_pdf(pdf_bytes: bytes, filename: str):
     documents = []

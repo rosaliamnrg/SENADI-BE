@@ -224,7 +224,7 @@ def extract_data_from_excel(excel_content, filename="unknown.xlsx"):
                     if row_text:
                         text_content.append(Document(
                             page_content=row_text,
-                            metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "data"}
+                            metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "data", "file_name": filename}
                         ))
 
         return text_content
