@@ -37,7 +37,7 @@ from langchain_community.docstore.in_memory import InMemoryDocstore
 
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams
+from qdrant_client.http.models import Distance, VectorParams, PayloadSchemaType
 from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
 
 # Load environment variables
@@ -179,7 +179,8 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> List[Document]:
                                     "page": i + 1,
                                     "chunk": j,
                                     "type": "pdf",
-                                    "id": str(uuid4())
+                                    "id": str(uuid4()),
+                                    'file_name': filename
                                 }
                             )
                         )
@@ -215,7 +216,7 @@ def extract_data_from_excel(excel_content, filename="unknown.xlsx"):
                                 qa_text = f"Permasalahan: {row[q_col]}\nJawaban: {row[a_col]}"
                                 text_content.append(Document(
                                     page_content=qa_text,
-                                    metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "qa", "id": str(uuid4())}
+                                    metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "qa", "id": str(uuid4()), 'file_name': filename}
                                 ))
             else:
                 for i, row in df.iterrows():
@@ -528,8 +529,8 @@ def initialize_vector_store_qdrant():
             try:
                 qdrant_client.create_payload_index(
                     collection_name=collection_name,
-                    field_name="source",
-                    field_schema="keyword"
+                    field_name="file_name",
+                    field_schema=PayloadSchemaType.KEYWORD
                 )
             except Exception as e:
                 print(f"[Qdrant] Payload index error: {e}")
@@ -1635,7 +1636,7 @@ def admin_delete_file_github(filename):
             filter = Filter(
             must=[
                     FieldCondition(
-                        key="source",
+                        key="file_name",
                         match=MatchValue(value=filename)
                     )
                 ]
@@ -1903,12 +1904,12 @@ def upload_file_github():
                     try:
                         qdrant_client.create_payload_index(
                             collection_name=collection_name,
-                            field_name="source",
-                            field_schema="keyword"
+                            field_name="file_name",
+                            field_schema=PayloadSchemaType.KEYWORD
                         )
                     except Exception as e:
                         print(f"[Qdrant] Payload index creation error (may already exist): {e}")
-                        
+
                     # Buat vector store dari Qdrant
                     vector_store.add_documents(new_documents)
                     print("Sukses menambahkan dokumen di Qdrant")

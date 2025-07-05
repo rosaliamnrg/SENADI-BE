@@ -10,14 +10,14 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams
+from qdrant_client.http.models import Distance, VectorParams, PayloadSchemaType
 from langchain_qdrant import QdrantVectorStore
 
 # Setup
 load_dotenv()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 
-QDRANT_COLLECTION = "senadi-dataset"
+QDRANT_COLLECTION = "chatbot-senadi-dataset"
 
 def extract_text_from_pdf(pdf_bytes: bytes, filename: str):
     documents = []
@@ -30,7 +30,7 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str):
                 for j, chunk in enumerate(chunks):
                     documents.append(Document(
                         page_content=chunk,
-                        metadata={"source": filename, "page": i + 1, "chunk": j, "type": "pdf", "id": str(uuid4())}
+                        metadata={"source": filename, "page": i + 1, "chunk": j, "type": "pdf", "id": str(uuid4()), 'file_name': filename}
                     ))
     except Exception as e:
         st.warning(f"❌ Gagal parsing PDF {filename}: {e}")
@@ -57,7 +57,7 @@ def extract_data_from_excel(excel_content, filename):
                                 qa_text = f"Permasalahan: {row[q_col]}\nJawaban: {row[a_col]}"
                                 text_content.append(Document(
                                     page_content=qa_text,
-                                    metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "qa", "id": str(uuid4())}
+                                    metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "qa", "id": str(uuid4()), 'file_name': filename}
                                 ))
             else:
                 for i, row in df.iterrows():
@@ -122,6 +122,14 @@ def push_to_qdrant(documents, batch_size=10):
             vectors_config={"dense": VectorParams(size=768, distance=Distance.COSINE)}
         )
 
+    try:
+        client.create_payload_index(
+            collection_name=QDRANT_COLLECTION,
+            field_name="file_name",
+            field_schema=PayloadSchemaType.KEYWORD
+        )
+    except Exception as e:
+        print(f"[Qdrant] Payload index creation error (may already exist): {e}")
     vector_store = QdrantVectorStore(
         client=client,
         collection_name=QDRANT_COLLECTION,
