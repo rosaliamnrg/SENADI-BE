@@ -128,7 +128,7 @@ def get_db_connection():
         port=int(os.getenv('DB_PORT', os.getenv('MYSQLPORT')))
     )
 
-def process_documents_and_add_to_qdrant(vector_store, doc_generator, batch_size=20):
+def process_documents_and_add_to_qdrant(vector_store, doc_generator, batch_size):
     batch = []
     for doc in doc_generator:
         batch.append(doc)
@@ -545,7 +545,7 @@ def initialize_vector_store_qdrant():
             print("Memproses dokumen dari Github")
             documents = process_documents_from_uploads_github()
             # vector_store.add_documents(documents)
-            process_documents_and_add_to_qdrant(vector_store, documents, batch_size=20)
+            process_documents_and_add_to_qdrant(vector_store, documents, batch_size=3)
             print("Berhasil menyimpan dokumen Github ke Qdrant")
 
         else:
