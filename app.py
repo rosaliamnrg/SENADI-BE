@@ -1102,7 +1102,8 @@ def chat(chat_id):
             else:
                 # Use LangChain QA chain for more complex queries
                 try:
-                    if qa_chain and vector_store_initialized:
+                    # if qa_chain and vector_store_initialized:
+                    if qa_chain :
                         print("Using LangChain QA chain for response generation")
                         try:
                             # Include conversation history in the query for context
