@@ -17,7 +17,7 @@ from langchain_qdrant import QdrantVectorStore
 load_dotenv()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 
-QDRANT_COLLECTION = "susenas-senadi-chatbot"
+QDRANT_COLLECTION = "senadi-chatbot"
 
 def extract_text_from_pdf(pdf_bytes: bytes, filename: str):
     documents = []
@@ -65,7 +65,7 @@ def extract_data_from_excel(excel_content, filename):
                     if row_text:
                         text_content.append(Document(
                             page_content=row_text,
-                            metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "data"}
+                            metadata={"source": f"{filename}:{sheet_name} row: {i}", "type": "data", "file_name": filename}
                         ))
 
         return text_content

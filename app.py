@@ -1955,6 +1955,9 @@ def upload_file_github():
                     return_source_documents=True,
                     chain_type_kwargs={"prompt": PROMPT}
                 )
+                app.config['qa_chain'] = qa_chain
+                app.config['vector_store'] = vector_store
+
         except Exception as indexing_err:
             return jsonify({"error": f"Qdrant indexing error: {str(indexing_err)}"}), 500
 
