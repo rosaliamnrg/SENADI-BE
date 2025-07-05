@@ -475,8 +475,10 @@ def initialize_vector_store():
         print(traceback.format_exc())
         return False
 
-def initialize_vector_store_qdrant():
-    global vector_store, qa_chain
+def initialize_vector_store_qdrant(app):
+    app.config['qa_chain'] = qa_chain
+    app.config['vector_store'] = vector_store
+    # global vector_store, qa_chain
 
     try:
         qdrant_client = QdrantClient(
@@ -554,7 +556,7 @@ def initialize_vector_store_qdrant():
             
             Pertanyaan: {question}
             
-            Jawaban: {context}
+            Konteks: {context}
             """,
             input_variables=["context", "question"]
         )
@@ -576,10 +578,6 @@ def initialize_vector_store_qdrant():
         print(f"Failed to initialize Qdrant vector store: {str(e)}")
         traceback.print_exc()
         return False
-
-# Initialize the vector store on startup
-print("Initializing vector store...")
-vector_store_initialized = initialize_vector_store_qdrant()
 
 # Enhanced conversation handlers
 def get_greeting_response(message):
@@ -986,7 +984,8 @@ def create_chat():
 @app.route('/chat/<chat_id>', methods=['POST'])
 @jwt_required()
 def chat(chat_id):
-    global qa_chain
+    # global qa_chain
+    qa_chain = app.config.get('qa_chain')
     try:
         user_id = get_jwt_identity()
         print(f"Processing chat message for user {user_id} in chat {chat_id}")
@@ -1575,6 +1574,8 @@ def admin_delete_file(filename):
 @jwt_required()
 def admin_delete_file_github(filename):
     global qa_chain, vector_store
+    qa_chain = app.config.get('qa_chain')
+    vector_store = app.config.get('vector_store')
 
     try:
         current_user = get_jwt_identity()
@@ -1775,7 +1776,9 @@ def admin_get_chat_plural(chat_id):
 @app.route('/upload_github', methods=['POST'])
 @jwt_required()
 def upload_file_github():
-    global qa_chain, vector_store
+    # global qa_chain, vector_store
+    qa_chain = app.config.get('qa_chain')
+    vector_store = app.config.get('vector_store')
     try:
         # 1. Ambil user
         user_id = get_jwt_identity()
@@ -2763,6 +2766,11 @@ def rebuild_knowledge():
 @app.route("/")
 def hello():
     return "Halo railway!"
+
+if __name__ == '__main__':
+    # Initialize the vector store on startup
+    print("Initializing vector store...")
+    vector_store_initialized = initialize_vector_store_qdrant(app)
 
 # if __name__ == '__main__':
 #     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
