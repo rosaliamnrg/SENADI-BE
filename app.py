@@ -1899,6 +1899,16 @@ def upload_file_github():
                 # )
 
                 if vector_store:
+                    # Buat index untuk field 'source' agar bisa digunakan sebagai filter
+                    try:
+                        qdrant_client.create_payload_index(
+                            collection_name=collection_name,
+                            field_name="source",
+                            field_schema="keyword"
+                        )
+                    except Exception as e:
+                        print(f"[Qdrant] Payload index creation error (may already exist): {e}")
+                        
                     # Buat vector store dari Qdrant
                     vector_store.add_documents(new_documents)
                     print("Sukses menambahkan dokumen di Qdrant")
