@@ -128,14 +128,24 @@ def get_db_connection():
         port=int(os.getenv('DB_PORT', os.getenv('MYSQLPORT')))
     )
 
-def add_documents_in_batches(documents: List[Document], embeddings, batch_size: int = 10):
-    for i in range(0, len(documents), batch_size):
-        batch = documents[i:i + batch_size]
+def process_documents_and_add_to_qdrant(vector_store, doc_generator, batch_size=20):
+    batch = []
+    for doc in doc_generator:
+        batch.append(doc)
+        if len(batch) >= batch_size:
+            try:
+                vector_store.add_documents(batch)
+                print(f"Added batch of {len(batch)} documents")
+            except Exception as e:
+                print(f"[Batch error] {e}")
+            batch = []
+    if batch:
         try:
-            vector_store_batch = FAISS.from_documents(batch, embeddings)
-            vector_store.merge_from(vector_store_batch)
+            vector_store.add_documents(batch)
+            print(f"Added final batch of {len(batch)} documents")
         except Exception as e:
-            print(f"[Batch error] {str(e)}")
+            print(f"[Final batch error] {e}")
+
 
             
 def extract_text_from_pdf(pdf_bytes: bytes, filename: str) -> List[Document]:
@@ -323,10 +333,15 @@ def process_documents_from_uploads_github(deleted_filename = None):
     """
     
     # Add basic info as a document
-    documents.append(Document(
+    # documents.append(Document(
+    #     page_content=basic_info,
+    #     metadata={"source": "basic_info", "type": "overview"}
+    # ))
+    
+    yield Document(
         page_content=basic_info,
         metadata={"source": "basic_info", "type": "overview"}
-    ))
+    )
     
     # Process each file in the uploads directory
     try:
@@ -361,18 +376,25 @@ def process_documents_from_uploads_github(deleted_filename = None):
             print(f"Processing {name}")
             if name.lower().endswith(('.xlsx', '.xls')):
                 docs = extract_data_from_excel(file_content.content, filename=name)
-                documents.extend(docs)
+                # documents.extend(docs)
             elif name.lower().endswith('.pdf'):
                 docs = extract_text_from_pdf(file_content.content, name)
-                documents.extend(docs)
+                # documents.extend(docs)
             elif name.lower().endswith(('.txt', '.csv', '.md')):
                 text = file_content.text
                 chunks = text_splitter.split_text(text)
-                for i, chunk in enumerate(chunks):
-                    documents.append(Document(page_content=chunk, metadata={"source": name, "chunk": i}))
+                # for i, chunk in enumerate(chunks):
+                #     documents.append(Document(page_content=chunk, metadata={"source": name, "chunk": i}))
+                docs = [Document(page_content=chunk, metadata={"source": name, "chunk": i}) for i, chunk in enumerate(chunks)]
+            else:
+                docs = []
 
-        print(f"Processed {len(documents)} documents.")
-        return documents
+            for doc in docs:
+                yield doc
+                
+        # print(f"Processed {len(docs)} documents.")
+        print(f"Processed documents from github is finished.")
+        # return documents
 
     except Exception as e:
         print(traceback.format_exc())
@@ -522,7 +544,8 @@ def initialize_vector_store_qdrant():
             
             print("Memproses dokumen dari Github")
             documents = process_documents_from_uploads_github()
-            vector_store.add_documents(documents)
+            # vector_store.add_documents(documents)
+            process_documents_and_add_to_qdrant(vector_store, documents, batch_size=20)
             print("Berhasil menyimpan dokumen Github ke Qdrant")
 
         else:
