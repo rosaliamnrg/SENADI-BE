@@ -478,6 +478,8 @@ def initialize_vector_store():
 @app.before_request
 def initialize_vector_store_qdrant():
     # global vector_store, qa_chain
+    if app.config.get("qa_chain", False):
+        return  # ✅ Sudah siap, skip semua
     print("Initializing vector store with Qdrant")
     try:
         qdrant_client = QdrantClient(
