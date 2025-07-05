@@ -50,7 +50,7 @@ print(f"Python version: {sys.version}")
 # Set up Google API key for Gemini
 GOOGLE_API_KEY = os.getenv('GEMINI_API_KEY')
 GEMINI_AVAILABLE = False
-MODEL_NAME = 'gemini-1.5-flash'  # Default model name
+MODEL_NAME = 'gemini-2.0-flash-lite'  # Default model name
 
 if GOOGLE_API_KEY:
     try:
@@ -66,7 +66,7 @@ if GOOGLE_API_KEY:
             print(f"Error with {MODEL_NAME}: {str(model_error)}")
             try:
                 # Try alternative model name
-                MODEL_NAME = 'gemini-1.5-flash'
+                MODEL_NAME = 'gemini-2.0-flash-lite'
                 model = genai.GenerativeModel(MODEL_NAME)
                 test_response = model.generate_content("Test")
                 if test_response:
