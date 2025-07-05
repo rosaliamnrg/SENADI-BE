@@ -574,12 +574,12 @@ def initialize_vector_store_qdrant():
         app.config['vector_store'] = vector_store
 
         print("QA chain created using Qdrant vector store.")
-        return True
+        return 
 
     except Exception as e:
         print(f"Failed to initialize Qdrant vector store: {str(e)}")
         traceback.print_exc()
-        return False
+        return 
 
 # Initialize the vector store on startup
 # print("Initializing vector store...")
